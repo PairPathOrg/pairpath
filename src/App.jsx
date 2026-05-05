@@ -149,6 +149,7 @@ function parseCSV(text) {
     if (obj.recipient_dob) { const p = obj.recipient_dob.split("/"); if (p.length === 3) obj.recipient_year_born = p[2].length === 4 ? p[2] : `20${p[2]}`; }
     if (obj.donor_dob) { const p = obj.donor_dob.split("/"); if (p.length === 3) obj.donor_year_born = p[2].length === 4 ? p[2] : `20${p[2]}`; }
     obj.status = "active"; obj.urgency = obj.urgency || "Medium"; obj.pair_type = obj.pair_type || "paired";
+["recipient_pra_percent","recipient_weight_kg","recipient_height_cm","donor_weight_kg","donor_height_cm","donor_egfr","recipient_prior_transplants"].forEach(k => { if (obj[k] === "" || obj[k] === undefined) obj[k] = null; });
     return obj;
   });
 }
