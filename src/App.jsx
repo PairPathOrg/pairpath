@@ -348,7 +348,7 @@ export default function App() {
     if (needsRecipient && !form.recipient_name) return;
     if (needsDonor && !form.donor_name) return;
     setAdding(true);
-    const insertData = { ...form, status: form.status || "active", user_id: currentUserId };
+    const insertData = { ...form, status: form.status || "active", user_id: currentUserId, donor_backup: form.donor_backup === true || form.donor_backup === "true" };
     if (editingPair) {
       await supabase.from("pairs").update(insertData).eq("id", editingPair);
       setEditingPair(null);
