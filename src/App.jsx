@@ -7,9 +7,6 @@ fontLink.rel = "stylesheet";
 fontLink.href = "https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap";
 document.head.appendChild(fontLink);
 
-// ── Mode ───────────────────────────────────────────────────────────────────
-const MODE = "solo"; // "solo" or "national"
-
 // ── Matching Engine ────────────────────────────────────────────────────────
 const ABO_COMPATIBLE = {
   O: ["O", "A", "B", "AB"],
@@ -39,6 +36,7 @@ function countHLAMismatches(donor, recipient) {
 }
 
 function calculateCompatibility(donor, recipient) {
+  if (!donor.donor_blood_type || !recipient.recipient_blood_type) return { compatible: false, score: 0, partial: true, reasons: {} };
   const aboOk = checkABO(donor.donor_blood_type, recipient.recipient_blood_type);
   const hlaMismatches = countHLAMismatches(donor, recipient);
   const highPRA = (recipient.recipient_pra_percent || 0) > 80;
@@ -49,39 +47,20 @@ function calculateCompatibility(donor, recipient) {
   const recipientAge = calcAge(recipient.recipient_year_born);
   const ageDiff = donorAge && recipientAge ? Math.abs(donorAge - recipientAge) : 0;
   const ageFlag = ageDiff > 15;
-  const donorBMI = donor.donor_weight_kg && donor.donor_height_cm
-    ? donor.donor_weight_kg / Math.pow(donor.donor_height_cm / 100, 2) : null;
+  const donorBMI = donor.donor_weight_kg && donor.donor_height_cm ? donor.donor_weight_kg / Math.pow(donor.donor_height_cm / 100, 2) : null;
   const bmiFlag = donorBMI && donorBMI > 35;
-
-  const score = aboOk
-    ? Math.max(0, 100
-        - hlaMismatches * 10
-        - (highPRA ? 20 : 0)
-        - (sizeOk ? 0 : 10)
-        - (cmvRisk ? 5 : 0)
-        - (ageFlag ? 8 : 0)
-        - (bmiFlag ? 5 : 0))
-    : 0;
-
   const dataComplete = !!(donor.donor_hla_a1 || donor.donor_hla_notes);
-  return {
-    compatible: aboOk && hlaMismatches <= 4,
-    score,
-    partial: !dataComplete,
-    reasons: { abo: aboOk, hlaMismatches, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff },
-  };
+  const score = aboOk ? Math.max(0, 100 - hlaMismatches * 10 - (highPRA ? 20 : 0) - (sizeOk ? 0 : 10) - (cmvRisk ? 5 : 0) - (ageFlag ? 8 : 0) - (bmiFlag ? 5 : 0)) : 0;
+  return { compatible: aboOk && hlaMismatches <= 4, score, partial: !dataComplete, reasons: { abo: aboOk, hlaMismatches, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff } };
 }
 
 // ── Chain Detection ────────────────────────────────────────────────────────
 function findChains(pairs) {
-  const active = pairs.filter(p => p.status === "active");
+  const active = pairs.filter(p => p.status === "active" && p.donor_blood_type && p.recipient_blood_type);
   const chains = [];
-
   function dfs(path, visited) {
-    if (path.length >= 2) {
-      chains.push([...path]);
-    }
-    if (path.length >= 6) return;
+    if (path.length >= 2) chains.push([...path]);
+    if (path.length >= 8) return;
     const last = path[path.length - 1];
     for (const candidate of active) {
       if (visited.has(candidate.id)) continue;
@@ -95,19 +74,14 @@ function findChains(pairs) {
       }
     }
   }
-
   for (const pair of active) {
     const visited = new Set([pair.id]);
     dfs([pair], visited);
   }
-
-  return chains
-    .filter(c => c.length >= 2)
-    .sort((a, b) => b.length - a.length)
-    .slice(0, 20);
+  return chains.filter(c => c.length >= 2).sort((a, b) => b.length - a.length).slice(0, 20);
 }
 
-// ── Styling helpers ────────────────────────────────────────────────────────
+// ── Style helpers ──────────────────────────────────────────────────────────
 function scoreStyle(score, partial) {
   if (partial && score === 0) return { bg: "#1e2530", text: "#5a6a7a", label: "Incomplete Data" };
   if (score >= 70) return { bg: "#0d6e4a", text: "#6effc6", label: "Compatible" };
@@ -122,8 +96,15 @@ const URGENCY_DEFS = {
   Low: "Early evaluation or preemptive. Medically stable with longer window.",
 };
 
+const PAIR_TYPES = [
+  { value: "paired", label: "Incompatible Pair", desc: "Recipient with a willing but incompatible donor" },
+  { value: "altruistic", label: "Altruistic Donor", desc: "Willing donor with no paired recipient" },
+  { value: "recipient_only", label: "Recipient Seeking Match", desc: "Recipient with no paired donor" },
+];
+
 // ── Empty form ─────────────────────────────────────────────────────────────
 const emptyForm = {
+  pair_type: "paired",
   recipient_name: "", recipient_blood_type: "A", recipient_pra_percent: "",
   recipient_weight_kg: "", recipient_height_cm: "", recipient_year_born: "",
   recipient_hla_a1: "", recipient_hla_a2: "", recipient_hla_b1: "", recipient_hla_b2: "",
@@ -134,52 +115,28 @@ const emptyForm = {
   donor_name: "", donor_blood_type: "A", donor_weight_kg: "", donor_height_cm: "",
   donor_year_born: "", donor_hla_a1: "", donor_hla_a2: "", donor_hla_b1: "", donor_hla_b2: "",
   donor_hla_dr1: "", donor_hla_dr2: "", donor_hla_notes: "",
-  donor_egfr: "", donor_cmv: "Unknown", donor_backup: false,
-  urgency: "Medium", status: "active", notes: "",
-  centre: "", altruistic: false, pair_type: "paired",
+  donor_egfr: "", donor_cmv: "Unknown", donor_backup: false, donor_zip: "",
+  urgency: "Medium", status: "active", notes: "", centre: "",
 };
 
-// ── CSV Template ───────────────────────────────────────────────────────────
+// ── CSV helpers ────────────────────────────────────────────────────────────
 function downloadTemplate() {
-  const headers = [
-    "recipient_name","recipient_dob","recipient_blood_type","recipient_pra_percent",
-    "recipient_weight_kg","recipient_height_cm","recipient_year_born",
-    "recipient_hla_a1","recipient_hla_a2","recipient_hla_b1","recipient_hla_b2",
-    "recipient_hla_dr1","recipient_hla_dr2","recipient_hla_notes","recipient_cmv",
-    "recipient_dialysis_start","recipient_prior_transplants","recipient_sensitisation_notes",
-    "recipient_relationship","recipient_zip",
-    "donor_name","donor_dob","donor_blood_type","donor_weight_kg","donor_height_cm",
-    "donor_year_born","donor_hla_a1","donor_hla_a2","donor_hla_b1","donor_hla_b2",
-    "donor_hla_dr1","donor_hla_dr2","donor_hla_notes","donor_egfr","donor_cmv",
-    "urgency","notes","centre","pair_type"
-  ];
-  const example = [
-    "Jane Smith","01/15/1978","A","25","65","163","1978",
-    "A2","A24","B7","B44","DR4","DR7","","Negative",
-    "2022-03-01","0","","Spouse","94109",
-    "John Smith","03/22/1976","B","78","180","1976",
-    "A1","A3","B8","B35","DR3","DR11","","90","Negative",
-    "Medium","","Sutter CPMC","paired"
-  ];
+  const headers = ["pair_type","recipient_name","recipient_dob","recipient_blood_type","recipient_pra_percent","recipient_weight_kg","recipient_height_cm","recipient_hla_notes","recipient_cmv","recipient_dialysis_start","recipient_prior_transplants","recipient_zip","donor_name","donor_dob","donor_blood_type","donor_weight_kg","donor_height_cm","donor_hla_notes","donor_egfr","donor_cmv","urgency","notes","centre"];
+  const example = ["paired","Jane Smith","01/15/1978","A","25","65","163","A*02:01 A*24:02 B*07:02","Negative","2022-03-01","0","94109","John Smith","03/22/1976","B","78","180","A*01 A*03 B*08 B*35","90","Negative","Medium","","Sutter CPMC"];
   const csv = [headers.join(","), example.join(",")].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "pairpath_upload_template.csv"; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = "pairpath_template.csv"; a.click();
 }
 
 function exportRegistry(pairs) {
   if (!pairs.length) return;
-  const keys = Object.keys(pairs[0]).filter(k => k !== "id");
-  const rows = pairs.map(p => keys.map(k => {
-    const v = p[k];
-    return typeof v === "string" && v.includes(",") ? `"${v}"` : (v ?? "Not recorded");
-  }).join(","));
+  const keys = Object.keys(pairs[0]).filter(k => !["id","user_id"].includes(k));
+  const rows = pairs.map(p => keys.map(k => { const v = p[k]; return typeof v === "string" && v.includes(",") ? `"${v}"` : (v ?? ""); }).join(","));
   const csv = [keys.join(","), ...rows].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = "pairpath_registry_export.csv"; a.click();
+  const a = document.createElement("a"); a.href = url; a.download = "pairpath_export.csv"; a.click();
 }
 
 function parseCSV(text) {
@@ -189,22 +146,124 @@ function parseCSV(text) {
     const vals = row.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
     const obj = {};
     headers.forEach((h, i) => { obj[h] = vals[i] || ""; });
-    if (obj.recipient_dob) {
-      const parts = obj.recipient_dob.split("/");
-      if (parts.length === 3) obj.recipient_year_born = parts[2].length === 4 ? parts[2] : `20${parts[2]}`;
-    }
-    if (obj.donor_dob) {
-      const parts = obj.donor_dob.split("/");
-      if (parts.length === 3) obj.donor_year_born = parts[2].length === 4 ? parts[2] : `20${parts[2]}`;
-    }
-    obj.status = obj.status || "active";
-    obj.urgency = obj.urgency || "Medium";
+    if (obj.recipient_dob) { const p = obj.recipient_dob.split("/"); if (p.length === 3) obj.recipient_year_born = p[2].length === 4 ? p[2] : `20${p[2]}`; }
+    if (obj.donor_dob) { const p = obj.donor_dob.split("/"); if (p.length === 3) obj.donor_year_born = p[2].length === 4 ? p[2] : `20${p[2]}`; }
+    obj.status = "active"; obj.urgency = obj.urgency || "Medium"; obj.pair_type = obj.pair_type || "paired";
     return obj;
   });
 }
 
+// ── Shared styles ──────────────────────────────────────────────────────────
+const S = {
+  app: { minHeight: "100vh", background: "#0a0e14", color: "#e8e4dc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 },
+  header: { borderBottom: "1px solid #1e2530", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60, background: "#0d1219", gap: 12 },
+  navBtn: (active) => ({ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: active ? "#1a2e24" : "transparent", color: active ? "#2dd4a0" : "#6b7a8d", transition: "all 0.15s" }),
+  page: { padding: "24px 28px", maxWidth: 1400, margin: "0 auto" },
+  pageTitle: { fontFamily: "'DM Serif Display', serif", fontSize: 26, fontWeight: 400, margin: "0 0 4px", color: "#e8e4dc" },
+  subtitle: { margin: "0 0 24px", color: "#5a6a7a", fontSize: 13 },
+  card: { background: "#0d1219", border: "1px solid #1a2530", borderRadius: 10, padding: 16 },
+  input: { width: "100%", boxSizing: "border-box", background: "#111820", border: "1px solid #1e2a34", borderRadius: 6, padding: "8px 10px", color: "#c8d4dc", fontSize: 13, fontFamily: "'DM Sans', sans-serif", outline: "none" },
+  select: { width: "100%", background: "#111820", border: "1px solid #1e2a34", borderRadius: 6, padding: "8px 10px", color: "#c8d4dc", fontSize: 13, fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" },
+  label: { fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.08em", display: "block", marginBottom: 4 },
+  btn: { padding: "9px 20px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 13, transition: "all 0.15s" },
+  tag: (color) => ({ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${color}22`, color, fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }),
+};
+
+// ── Auth Screen ────────────────────────────────────────────────────────────
+function AuthScreen() {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [centre, setCentre] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function handleLogin() {
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setError(error.message);
+    setLoading(false);
+  }
+
+  async function handleSignup() {
+    if (!name || !centre) { setError("Please enter your name and transplant centre."); return; }
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name, centre } } });
+    if (error) setError(error.message);
+    else setSuccess("Account created! Check your email to confirm, then sign in.");
+    setLoading(false);
+  }
+
+  async function handleReset() {
+    setLoading(true); setError("");
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) setError(error.message);
+    else setSuccess("Password reset email sent.");
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0a0e14", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ marginBottom: 32, textAlign: "center" }}>
+        <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8e4dc", marginBottom: 8 }}>PairPath</div>
+        <div style={{ fontSize: 13, color: "#3d8c6e" }}>Kidney Paired Donation Registry</div>
+      </div>
+      <div style={{ width: 380, background: "#0d1219", border: "1px solid #1a2530", borderRadius: 14, padding: 32 }}>
+        <div style={{ display: "flex", gap: 4, marginBottom: 24, background: "#111820", borderRadius: 8, padding: 4 }}>
+          {[["login","Sign In"],["signup","Create Account"]].map(([m,l]) => (
+            <button key={m} onClick={() => { setMode(m); setError(""); setSuccess(""); }}
+              style={{ flex: 1, padding: "8px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: mode === m ? "#1a2e24" : "transparent", color: mode === m ? "#2dd4a0" : "#6b7a8d" }}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {error && <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, background: "#2a1010", border: "1px solid #3a1010", color: "#ff8a8a", fontSize: 13 }}>{error}</div>}
+        {success && <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, background: "#0d2a1e", border: "1px solid #1a3028", color: "#2dd4a0", fontSize: 13 }}>{success}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {mode === "signup" && (
+            <>
+              <div><label style={S.label}>FULL NAME</label><input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" style={S.input} /></div>
+              <div><label style={S.label}>TRANSPLANT CENTRE</label><input value={centre} onChange={e => setCentre(e.target.value)} placeholder="e.g. Sutter CPMC" style={S.input} /></div>
+            </>
+          )}
+          <div><label style={S.label}>EMAIL</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@hospital.org" style={S.input} /></div>
+          <div><label style={S.label}>PASSWORD</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={S.input} /></div>
+          <button onClick={mode === "login" ? handleLogin : handleSignup} disabled={loading || !email || !password}
+            style={{ ...S.btn, background: "#2dd4a0", color: "#0a1a14", width: "100%", marginTop: 4, opacity: (!email || !password) ? 0.5 : 1 }}>
+            {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
+          </button>
+          {mode === "login" && (
+            <button onClick={handleReset} disabled={!email || loading}
+              style={{ background: "none", border: "none", color: "#3d8c6e", cursor: "pointer", fontSize: 12, padding: "4px 0", opacity: !email ? 0.4 : 1 }}>
+              Forgot password?
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{ marginTop: 24, fontSize: 11, color: "#2a3a4a", textAlign: "center", maxWidth: 380, lineHeight: 1.6 }}>
+        PairPath is a coordinator-facing clinical tool. Patient data is entered by transplant coordinators on behalf of patients. All matches require crossmatch confirmation before any clinical decision.
+      </div>
+    </div>
+  );
+}
+
+// ── Field component ────────────────────────────────────────────────────────
+function Field({ label, value, onChange, type = "text", placeholder }) {
+  return (
+    <div>
+      <label style={S.label}>{label.toUpperCase()}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{ ...S.input, fontFamily: type === "number" || type === "date" ? "'DM Mono', monospace" : "'DM Sans', sans-serif" }} />
+    </div>
+  );
+}
+
 // ── Main App ───────────────────────────────────────────────────────────────
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [pairs, setPairs] = useState([]);
   const [view, setView] = useState("grid");
   const [selected, setSelected] = useState(null);
@@ -216,20 +275,24 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterUrgency, setFilterUrgency] = useState("all");
   const [filterBlood, setFilterBlood] = useState("all");
-  const [filterCompat, setFilterCompat] = useState("all");
   const [sortBy, setSortBy] = useState("date");
   const [sortDir, setSortDir] = useState("desc");
   const [editingPair, setEditingPair] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
-  const [mode, setMode] = useState(MODE);
   const [showHLAAdvanced, setShowHLAAdvanced] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const fileRef = useRef();
 
   useEffect(() => {
-    supabase.from("pairs").select("*").order("created_at", { ascending: false }).then(({ data }) => {
-      if (data) setPairs(data);
-    });
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    supabase.from("pairs").select("*").order("created_at", { ascending: false }).then(({ data }) => { if (data) setPairs(data); });
     const channel = supabase.channel("pairpath-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "pairs" }, (payload) => {
         if (payload.eventType === "INSERT") setPairs(prev => [payload.new, ...prev]);
@@ -237,48 +300,55 @@ export default function App() {
         if (payload.eventType === "DELETE") setPairs(prev => prev.filter(p => p.id !== payload.old.id));
       }).subscribe();
     return () => supabase.removeChannel(channel);
-  }, []);
+  }, [session]);
 
+  if (authLoading) return (
+    <div style={{ minHeight: "100vh", background: "#0a0e14", display: "flex", alignItems: "center", justifyContent: "center", color: "#3d8c6e", fontFamily: "'DM Mono', monospace", fontSize: 13 }}>
+      Loading PairPath…
+    </div>
+  );
+
+  if (!session) return <AuthScreen />;
+
+  const currentUserId = session.user.id;
+  const userMeta = session.user.user_metadata || {};
   const activePairs = pairs.filter(p => p.status === "active");
 
   const filteredPairs = pairs.filter(p => {
     if (filterStatus !== "all" && p.status !== filterStatus) return false;
     if (filterUrgency !== "all" && p.urgency !== filterUrgency) return false;
     if (filterBlood !== "all" && p.recipient_blood_type !== filterBlood) return false;
-    if (search && !p.recipient_name?.toLowerCase().includes(search.toLowerCase())
-        && !p.donor_name?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !p.recipient_name?.toLowerCase().includes(search.toLowerCase()) && !p.donor_name?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a, b) => {
     let va, vb;
     if (sortBy === "date") { va = new Date(a.created_at); vb = new Date(b.created_at); }
-    else if (sortBy === "urgency") {
-      const u = { High: 0, Medium: 1, Low: 2 };
-      va = u[a.urgency] ?? 1; vb = u[b.urgency] ?? 1;
-    }
-    else if (sortBy === "name") { va = a.recipient_name || ""; vb = b.recipient_name || ""; }
+    else if (sortBy === "urgency") { const u = { High: 0, Medium: 1, Low: 2 }; va = u[a.urgency] ?? 1; vb = u[b.urgency] ?? 1; }
+    else { va = a.recipient_name || ""; vb = b.recipient_name || ""; }
     return sortDir === "desc" ? (va > vb ? -1 : 1) : (va > vb ? 1 : -1);
   });
 
   const chains = findChains(pairs);
-
   const stats = {
-    total: pairs.length,
-    active: activePairs.length,
+    total: pairs.length, active: activePairs.length,
     highUrgency: activePairs.filter(p => p.urgency === "High").length,
     completed: pairs.filter(p => p.status === "completed").length,
     withdrawn: pairs.filter(p => p.status === "withdrawn").length,
-    withMatch: activePairs.filter(p =>
-      activePairs.some(d => d.id !== p.id && calculateCompatibility(d, p).score >= 70)
-    ).length,
+    withMatch: activePairs.filter(p => p.recipient_blood_type && activePairs.some(d => d.id !== p.id && d.donor_blood_type && calculateCompatibility(d, p).score >= 70)).length,
+    altruistic: pairs.filter(p => p.pair_type === "altruistic").length,
+    recipientOnly: pairs.filter(p => p.pair_type === "recipient_only").length,
     chains2: chains.filter(c => c.length === 2).length,
     chains3: chains.filter(c => c.length === 3).length,
     chainsLong: chains.filter(c => c.length > 3).length,
   };
 
   async function handleAdd() {
-    if (!form.recipient_name || !form.donor_name || !form.recipient_blood_type || !form.donor_blood_type) return;
+    const needsRecipient = form.pair_type !== "altruistic";
+    const needsDonor = form.pair_type !== "recipient_only";
+    if (needsRecipient && !form.recipient_name) return;
+    if (needsDonor && !form.donor_name) return;
     setAdding(true);
-    const insertData = { ...form, status: form.status || "active" };
+    const insertData = { ...form, status: form.status || "active", user_id: currentUserId };
     if (editingPair) {
       await supabase.from("pairs").update(insertData).eq("id", editingPair);
       setEditingPair(null);
@@ -286,9 +356,12 @@ export default function App() {
       const { data, error } = await supabase.from("pairs").insert([insertData]).select();
       if (!error && data) { setFlash(data[0].id); setTimeout(() => setFlash(null), 2500); }
     }
-    setForm(emptyForm);
-    setView("grid");
-    setAdding(false);
+    setForm(emptyForm); setView("grid"); setAdding(false);
+  }
+
+  async function handleDelete(id) {
+    await supabase.from("pairs").delete().eq("id", id);
+    setDeleteConfirm(null);
   }
 
   async function handleStatusChange(id, status) {
@@ -308,64 +381,57 @@ export default function App() {
   }
 
   async function handleCSVUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]; if (!file) return;
     setUploading(true);
     const text = await file.text();
     try {
-      const rows = parseCSV(text);
+      const rows = parseCSV(text).map(r => ({ ...r, user_id: currentUserId }));
       const { data, error } = await supabase.from("pairs").insert(rows).select();
       if (error) setUploadResult({ success: false, message: error.message });
       else setUploadResult({ success: true, message: `${data.length} pairs imported successfully` });
     } catch (err) {
       setUploadResult({ success: false, message: "CSV parsing error — check your file matches the template" });
     }
-    setUploading(false);
-    e.target.value = "";
+    setUploading(false); e.target.value = "";
   }
 
-  const S = {
-    app: { minHeight: "100vh", background: "#0a0e14", color: "#e8e4dc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 },
-    header: { borderBottom: "1px solid #1e2530", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60, background: "#0d1219", gap: 12 },
-    navBtn: (active) => ({ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: active ? "#1a2e24" : "transparent", color: active ? "#2dd4a0" : "#6b7a8d", transition: "all 0.15s" }),
-    page: { padding: "24px 28px", maxWidth: 1400, margin: "0 auto" },
-    pageTitle: { fontFamily: "'DM Serif Display', serif", fontSize: 26, fontWeight: 400, margin: "0 0 4px", color: "#e8e4dc" },
-    subtitle: { margin: "0 0 24px", color: "#5a6a7a", fontSize: 13 },
-    card: { background: "#0d1219", border: "1px solid #1a2530", borderRadius: 10, padding: 16 },
-    input: { width: "100%", boxSizing: "border-box", background: "#111820", border: "1px solid #1e2a34", borderRadius: 6, padding: "8px 10px", color: "#c8d4dc", fontSize: 13, fontFamily: "'DM Sans', sans-serif", outline: "none" },
-    select: { width: "100%", background: "#111820", border: "1px solid #1e2a34", borderRadius: 6, padding: "8px 10px", color: "#c8d4dc", fontSize: 13, fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" },
-    label: { fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.08em", display: "block", marginBottom: 4 },
-    btn: { padding: "9px 20px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: 13, transition: "all 0.15s" },
-    tag: (color) => ({ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${color}22`, color, fontFamily: "'DM Mono', monospace", letterSpacing: "0.05em" }),
-  };
+  const pairTypeLabel = (type) => PAIR_TYPES.find(t => t.value === type)?.label || "Pair";
 
   return (
     <div style={S.app}>
+      {/* Delete confirmation */}
+      {deleteConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ ...S.card, maxWidth: 400, width: "90%", textAlign: "center" }}>
+            <div style={{ fontSize: 16, color: "#e8e4dc", marginBottom: 8 }}>Delete this entry?</div>
+            <div style={{ fontSize: 13, color: "#5a6a7a", marginBottom: 24 }}>
+              {deleteConfirm.recipient_name || deleteConfirm.donor_name} — this cannot be undone.
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button onClick={() => handleDelete(deleteConfirm.id)} style={{ ...S.btn, background: "#6e0d0d", color: "#ff8a8a" }}>Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} style={{ ...S.btn, background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header style={S.header}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
           <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 20, color: "#e8e4dc" }}>PairPath</span>
-          <span style={S.tag("#3d8c6e")}>{mode.toUpperCase()}</span>
-          {stats.highUrgency > 0 && (
-            <span style={{ ...S.tag("#ff8a8a"), animation: "pulse 2s infinite" }}>
-              {stats.highUrgency} HIGH URGENCY
-            </span>
-          )}
+          {stats.highUrgency > 0 && <span style={S.tag("#ff8a8a")}>{stats.highUrgency} HIGH URGENCY</span>}
         </div>
         <nav style={{ display: "flex", gap: 2 }}>
-          {[["grid","Grid"],["registry","Registry"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add Pair"]].map(([v,l]) => (
+          {[["grid","Grid"],["registry","Registry"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l]) => (
             <button key={v} onClick={() => { setView(v); setEditingPair(null); if(v==="add") setForm(emptyForm); }} style={S.navBtn(view===v)}>{l}</button>
           ))}
         </nav>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-          {mode === "solo" && (
-            <button onClick={() => setMode("national")} style={{ ...S.navBtn(false), fontSize: 11 }}>Switch to National</button>
-          )}
-          {mode === "national" && (
-            <button onClick={() => setMode("solo")} style={{ ...S.navBtn(false), fontSize: 11 }}>Switch to Solo</button>
-          )}
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#2dd4a0", boxShadow: "0 0 6px #2dd4a0" }} />
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: 12, color: "#5a6a7a" }}>{userMeta.full_name || session.user.email}</span>
+          {userMeta.centre && <span style={S.tag("#3d5060")}>{userMeta.centre}</span>}
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#2dd4a0" }} />
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "#3d8c6e" }}>{activePairs.length} ACTIVE</span>
+          <button onClick={() => supabase.auth.signOut()} style={{ ...S.btn, padding: "5px 12px", background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a", fontSize: 12 }}>Sign Out</button>
         </div>
       </header>
 
@@ -373,31 +439,28 @@ export default function App() {
       {view === "grid" && (
         <div style={S.page}>
           <h1 style={S.pageTitle}>Compatibility Grid</h1>
-          <p style={S.subtitle}>Scores between every active donor and recipient. Click any cell for full breakdown.</p>
-
-          {/* Filters */}
+          <p style={S.subtitle}>Click any cell for a full compatibility breakdown.</p>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
-            <select value={filterBlood} onChange={e => setFilterBlood(e.target.value)} style={{ ...S.select, width: 110 }}>
-              <option value="all">All Blood</option>
+            <select value={filterBlood} onChange={e => setFilterBlood(e.target.value)} style={{ ...S.select, width: 130 }}>
+              <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b => <option key={b}>{b}</option>)}
             </select>
-            <select value={filterUrgency} onChange={e => setFilterUrgency(e.target.value)} style={{ ...S.select, width: 120 }}>
+            <select value={filterUrgency} onChange={e => setFilterUrgency(e.target.value)} style={{ ...S.select, width: 130 }}>
               <option value="all">All Urgency</option>
               {["High","Medium","Low"].map(u => <option key={u}>{u}</option>)}
             </select>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              {[["Compatible","70+"],["Marginal","40-69"],["Incompatible","<40"]].map(([l,r]) => (
-                <span key={l} style={{ fontSize: 11, color: "#5a6a7a" }}>
-                  <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: scoreStyle(l==="Compatible"?80:l==="Marginal"?55:10).bg, marginRight: 4 }}/>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 16 }}>
+              {[["Compatible","70+",80],["Marginal","40–69",55],["Incompatible","<40",10]].map(([l,r,sc]) => (
+                <span key={l} style={{ fontSize: 11, color: "#5a6a7a", display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: scoreStyle(sc).bg }}/>
                   {l} ({r})
                 </span>
               ))}
             </div>
           </div>
-
-          {activePairs.length === 0 ? (
+          {activePairs.filter(p => p.donor_blood_type).length === 0 ? (
             <div style={{ textAlign: "center", padding: 80, color: "#3a4a5a" }}>
-              <div style={{ fontSize: 13, marginBottom: 16 }}>No active pairs in registry</div>
+              <div style={{ fontSize: 13, marginBottom: 16 }}>No active pairs with donors yet</div>
               <button onClick={() => setView("add")} style={{ ...S.btn, background: "#2dd4a0", color: "#0a1a14" }}>Register First Pair</button>
             </div>
           ) : (
@@ -405,24 +468,25 @@ export default function App() {
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
                 <thead>
                   <tr style={{ background: "#0d1219" }}>
-                    <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 10, color: "#3d5060", fontFamily: "'DM Mono', monospace", letterSpacing: "0.08em", fontWeight: 400, borderBottom: "1px solid #1a2530", borderRight: "1px solid #1a2530", minWidth: 180, whiteSpace: "nowrap" }}>
+                    <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 10, color: "#3d5060", fontFamily: "'DM Mono', monospace", letterSpacing: "0.08em", fontWeight: 400, borderBottom: "1px solid #1a2530", borderRight: "1px solid #1a2530", minWidth: 180 }}>
                       RECIPIENT ↓ / DONOR →
                     </th>
-                    {activePairs.map(p => (
+                    {activePairs.filter(p => p.donor_blood_type).map(p => (
                       <th key={p.id} style={{ padding: "10px 12px", textAlign: "center", borderBottom: "1px solid #1a2530", borderRight: "1px solid #1a2530", minWidth: 90 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "#c8d4dc", whiteSpace: "nowrap" }}>{p.donor_name?.split(" ")[0]}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#c8d4dc" }}>{(p.donor_name || "Altruistic").split(" ")[0]}</div>
                         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d8c6e", marginTop: 2 }}>{p.donor_blood_type}</div>
+                        {p.pair_type === "altruistic" && <div style={{ fontSize: 9, color: "#ffd166", marginTop: 1 }}>ALT</div>}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {activePairs
+                  {activePairs.filter(p => p.recipient_blood_type)
                     .filter(p => filterBlood === "all" || p.recipient_blood_type === filterBlood)
                     .filter(p => filterUrgency === "all" || p.urgency === filterUrgency)
                     .map((recipient, ri) => (
                     <tr key={recipient.id} style={{ background: recipient.id === flash ? "#0d2a1e" : ri % 2 === 0 ? "#0a0e14" : "#0c1018", transition: "background 0.5s" }}>
-                      <td style={{ padding: "10px 16px", borderBottom: "1px solid #141c24", borderRight: "1px solid #1a2530", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 16px", borderBottom: "1px solid #141c24", borderRight: "1px solid #1a2530" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div style={{ width: 6, height: 6, borderRadius: "50%", background: URGENCY_COLORS[recipient.urgency] || "#5a6a7a", flexShrink: 0 }} title={URGENCY_DEFS[recipient.urgency]} />
                           <div>
@@ -434,10 +498,8 @@ export default function App() {
                           </div>
                         </div>
                       </td>
-                      {activePairs.map(donor => {
-                        if (donor.id === recipient.id) return (
-                          <td key={donor.id} style={{ textAlign: "center", borderBottom: "1px solid #141c24", borderRight: "1px solid #141c24", background: "#0d1219", color: "#1e2a34", fontSize: 14 }}>—</td>
-                        );
+                      {activePairs.filter(p => p.donor_blood_type).map(donor => {
+                        if (donor.id === recipient.id) return <td key={donor.id} style={{ textAlign: "center", borderBottom: "1px solid #141c24", borderRight: "1px solid #141c24", background: "#0d1219", color: "#1e2a34" }}>—</td>;
                         const result = calculateCompatibility(donor, recipient);
                         const s = scoreStyle(result.score, result.partial);
                         const cellKey = `${donor.id}-${recipient.id}`;
@@ -446,14 +508,10 @@ export default function App() {
                             onMouseEnter={() => setHoveredCell(cellKey)}
                             onMouseLeave={() => setHoveredCell(null)}
                             onClick={() => openDetail(donor, recipient)}
-                            title={`ABO: ${result.reasons.abo ? "✓" : "✗"} | HLA MM: ${result.reasons.hlaMismatches} | ${result.partial ? "Partial data" : s.label}`}
+                            title={`ABO: ${result.reasons.abo ? "✓" : "✗"} | HLA MM: ${result.reasons.hlaMismatches} | ${s.label}`}
                             style={{ textAlign: "center", cursor: "pointer", borderBottom: "1px solid #141c24", borderRight: "1px solid #141c24", background: hoveredCell === cellKey ? s.bg : `${s.bg}99`, transition: "background 0.15s", padding: "10px 6px" }}>
-                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 500, color: s.text, lineHeight: 1 }}>
-                              {result.partial ? "?" : result.score}
-                            </div>
-                            <div style={{ fontSize: 9, color: `${s.text}88`, marginTop: 3 }}>
-                              {result.partial ? "data" : `${result.reasons.hlaMismatches}MM`}
-                            </div>
+                            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 16, fontWeight: 500, color: s.text, lineHeight: 1 }}>{result.partial ? "?" : result.score}</div>
+                            <div style={{ fontSize: 9, color: `${s.text}88`, marginTop: 3 }}>{result.partial ? "data" : `${result.reasons.hlaMismatches}MM`}</div>
                           </td>
                         );
                       })}
@@ -464,7 +522,7 @@ export default function App() {
             </div>
           )}
           <p style={{ marginTop: 10, fontSize: 11, color: "#2a3a4a", fontFamily: "'DM Mono', monospace" }}>
-            MM = HLA mismatches · ? = incomplete HLA data · Scores are computational screens only — confirm with crossmatch
+            MM = HLA mismatches · ? = incomplete HLA data · ALT = altruistic donor · All matches require crossmatch confirmation
           </p>
         </div>
       )}
@@ -475,7 +533,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
             <div>
               <h1 style={S.pageTitle}>Registry</h1>
-              <p style={{ ...S.subtitle, marginBottom: 0 }}>All pairs — manage, edit, filter and export</p>
+              <p style={{ ...S.subtitle, marginBottom: 0 }}>All entries — manage, edit, and export. You can only edit and delete your own entries.</p>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={downloadTemplate} style={{ ...S.btn, background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a" }}>Download CSV Template</button>
@@ -490,28 +548,27 @@ export default function App() {
           {uploadResult && (
             <div style={{ marginBottom: 16, padding: "10px 16px", borderRadius: 8, background: uploadResult.success ? "#0d2a1e" : "#2a1010", border: `1px solid ${uploadResult.success ? "#1a3028" : "#3a1010"}`, color: uploadResult.success ? "#2dd4a0" : "#ff8a8a", fontSize: 13 }}>
               {uploadResult.message}
-              <button onClick={() => setUploadResult(null)} style={{ marginLeft: 12, background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+              <button onClick={() => setUploadResult(null)} style={{ marginLeft: 12, background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16 }}>×</button>
             </div>
           )}
 
-          {/* Search and filters */}
           <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
             <input placeholder="Search by name…" value={search} onChange={e => setSearch(e.target.value)} style={{ ...S.input, width: 200 }} />
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...S.select, width: 140 }}>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...S.select, width: 160 }}>
               <option value="all">All Status</option>
               {["active","matched","surgery_scheduled","completed","withdrawn","on_hold","transferred"].map(s => (
-                <option key={s} value={s}>{s.replace("_"," ").replace(/\b\w/g,l=>l.toUpperCase())}</option>
+                <option key={s} value={s}>{s.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase())}</option>
               ))}
             </select>
             <select value={filterUrgency} onChange={e => setFilterUrgency(e.target.value)} style={{ ...S.select, width: 130 }}>
               <option value="all">All Urgency</option>
               {["High","Medium","Low"].map(u => <option key={u}>{u}</option>)}
             </select>
-            <select value={filterBlood} onChange={e => setFilterBlood(e.target.value)} style={{ ...S.select, width: 120 }}>
-              <option value="all">All Blood Type</option>
+            <select value={filterBlood} onChange={e => setFilterBlood(e.target.value)} style={{ ...S.select, width: 130 }}>
+              <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b => <option key={b}>{b}</option>)}
             </select>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...S.select, width: 130 }}>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ ...S.select, width: 150 }}>
               <option value="date">Sort: Date Added</option>
               <option value="urgency">Sort: Urgency</option>
               <option value="name">Sort: Name</option>
@@ -522,66 +579,64 @@ export default function App() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filteredPairs.length === 0 && (
-              <div style={{ textAlign: "center", padding: 40, color: "#3a4a5a", fontSize: 13 }}>No pairs match your filters</div>
-            )}
+            {filteredPairs.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "#3a4a5a", fontSize: 13 }}>No entries match your filters</div>}
             {filteredPairs.map(pair => {
-              const bestScore = activePairs
-                .filter(d => d.id !== pair.id)
-                .map(d => calculateCompatibility(d, pair).score)
-                .sort((a,b) => b-a)[0] ?? null;
+              const isOwner = pair.user_id === currentUserId;
+              const donorPairs = activePairs.filter(p => p.donor_blood_type);
+              const bestScore = pair.recipient_blood_type ? donorPairs.filter(d => d.id !== pair.id).map(d => calculateCompatibility(d, pair).score).sort((a,b) => b-a)[0] ?? null : null;
               const bs = bestScore !== null ? scoreStyle(bestScore) : null;
               const donorAge = calcAge(pair.donor_year_born);
               const recipientAge = calcAge(pair.recipient_year_born);
               return (
-                <div key={pair.id} style={{ ...S.card, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                  <div style={{ width: 6, height: 40, borderRadius: 3, background: URGENCY_COLORS[pair.urgency] || "#3a4a5a", flexShrink: 0 }} title={pair.urgency} />
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "#c8d4dc" }}>{pair.recipient_name}</span>
-                      <span style={S.tag("#3d8c6e")}>{pair.recipient_blood_type}</span>
-                      {pair.recipient_pra_percent > 80 && <span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
-                      {pair.urgency === "High" && <span style={S.tag("#ff8a8a")}>URGENT</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#5a6a7a" }}>
-                      Recipient{recipientAge ? ` · Age ${recipientAge}` : ""} · PRA {pair.recipient_pra_percent || "?"}%
-                      {pair.recipient_zip ? ` · ${pair.recipient_zip}` : ""}
-                    </div>
+                <div key={pair.id} style={{ ...S.card, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", borderColor: isOwner ? "#1a2530" : "#141c20" }}>
+                  <div style={{ width: 6, height: 40, borderRadius: 3, background: URGENCY_COLORS[pair.urgency] || "#3a4a5a", flexShrink: 0 }} />
+                  <span style={S.tag("#3d5060")}>{pairTypeLabel(pair.pair_type)}</span>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    {pair.recipient_name && (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#c8d4dc" }}>{pair.recipient_name}</span>
+                          {pair.recipient_blood_type && <span style={S.tag("#3d8c6e")}>{pair.recipient_blood_type}</span>}
+                          {pair.urgency === "High" && <span style={S.tag("#ff8a8a")}>URGENT</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#5a6a7a" }}>Recipient{recipientAge ? ` · Age ${recipientAge}` : ""}{pair.recipient_pra_percent ? ` · PRA ${pair.recipient_pra_percent}%` : ""}</div>
+                      </>
+                    )}
+                    {pair.donor_name && (
+                      <div style={{ fontSize: 12, color: "#8a9aaa", marginTop: pair.recipient_name ? 4 : 0 }}>
+                        Donor: <strong style={{ color: "#c8d4dc" }}>{pair.donor_name}</strong>
+                        {pair.donor_blood_type ? ` · ${pair.donor_blood_type}` : ""}
+                        {donorAge ? ` · Age ${donorAge}` : ""}
+                        {pair.donor_egfr ? ` · eGFR ${pair.donor_egfr}` : ""}
+                      </div>
+                    )}
+                    {pair.centre && <div style={{ fontSize: 11, color: "#3d5060", marginTop: 4 }}>{pair.centre}</div>}
                   </div>
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <div style={{ fontSize: 13, color: "#8a9aaa", marginBottom: 2 }}>Donor: <strong style={{ color: "#c8d4dc" }}>{pair.donor_name}</strong></div>
-                    <div style={{ fontSize: 12, color: "#5a6a7a" }}>
-                      {pair.donor_blood_type}{donorAge ? ` · Age ${donorAge}` : ""}
-                      {pair.donor_egfr ? ` · eGFR ${pair.donor_egfr}` : ""}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    {bs && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+                    {bs !== null && (
                       <div style={{ textAlign: "center", padding: "6px 12px", borderRadius: 8, background: `${bs.bg}99` }}>
                         <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, color: bs.text, lineHeight: 1 }}>{bestScore}</div>
                         <div style={{ fontSize: 9, color: `${bs.text}88`, marginTop: 2 }}>BEST</div>
                       </div>
                     )}
-                    <select value={pair.status} onChange={e => handleStatusChange(pair.id, e.target.value)}
-                      style={{ ...S.select, width: 160, fontSize: 12 }}>
+                    <select value={pair.status} onChange={e => handleStatusChange(pair.id, e.target.value)} disabled={!isOwner}
+                      style={{ ...S.select, width: 170, fontSize: 12, opacity: isOwner ? 1 : 0.4 }}>
                       {["active","matched","surgery_scheduled","completed","withdrawn","on_hold","transferred"].map(s => (
-                        <option key={s} value={s}>{s.replace("_"," ").replace(/\b\w/g,l=>l.toUpperCase())}</option>
+                        <option key={s} value={s}>{s.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase())}</option>
                       ))}
                     </select>
-                    <button onClick={() => startEdit(pair)} style={{ ...S.btn, background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a", padding: "6px 12px" }}>Edit</button>
+                    {isOwner && (
+                      <>
+                        <button onClick={() => startEdit(pair)} style={{ ...S.btn, background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a", padding: "6px 12px" }}>Edit</button>
+                        <button onClick={() => setDeleteConfirm(pair)} style={{ ...S.btn, background: "transparent", border: "1px solid #3a1010", color: "#ff8a8a", padding: "6px 12px" }}>Delete</button>
+                      </>
+                    )}
                   </div>
-                  {pair.notes && (
-                    <div style={{ width: "100%", fontSize: 12, color: "#4a5a6a", borderTop: "1px solid #141c24", paddingTop: 8, marginTop: 4 }}>
-                      📝 {pair.notes}
-                    </div>
-                  )}
+                  {pair.notes && <div style={{ width: "100%", fontSize: 12, color: "#4a5a6a", borderTop: "1px solid #141c24", paddingTop: 8, marginTop: 4 }}>📝 {pair.notes}</div>}
                 </div>
               );
             })}
           </div>
-          <p style={{ marginTop: 12, fontSize: 11, color: "#2a3a4a", fontFamily: "'DM Mono', monospace" }}>
-            {filteredPairs.length} pairs shown 
-          </p>
         </div>
       )}
 
@@ -589,94 +644,75 @@ export default function App() {
       {view === "chains" && (
         <div style={S.page}>
           <h1 style={S.pageTitle}>Chain Identification</h1>
-          <p style={S.subtitle}>Compatible exchange chains detected across all active pairs. No length cap.</p>
+          <p style={S.subtitle}>Compatible exchange chains across all active pairs. No length cap — chains update as new pairs are added.</p>
           {chains.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 60, color: "#3a4a5a", fontSize: 13 }}>
-              No compatible chains found yet — add more pairs to the registry to identify exchange opportunities
-            </div>
+            <div style={{ textAlign: "center", padding: 60, color: "#3a4a5a", fontSize: 13 }}>No compatible chains found yet — add more pairs to identify exchange opportunities</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {chains.map((chain, ci) => (
                 <div key={ci} style={{ ...S.card, borderColor: chain.length >= 4 ? "#2d6e8c" : chain.length >= 3 ? "#3d8c6e" : "#1a2530" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                    <span style={S.tag(chain.length >= 4 ? "#6ab4d0" : chain.length >= 3 ? "#2dd4a0" : "#5a6a7a")}>
-                      {chain.length}-WAY CHAIN
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+                    <span style={S.tag(chain.length >= 4 ? "#6ab4d0" : chain.length >= 3 ? "#2dd4a0" : "#5a6a7a")}>{chain.length}-WAY CHAIN</span>
                     {chain.length >= 4 && <span style={S.tag("#ffd166")}>COMPLEX EXCHANGE</span>}
-                    <span style={{ marginLeft: "auto", fontSize: 12, color: "#5a6a7a" }}>
-                      All pairs within ~{Math.round(chain.reduce((acc, p) => {
-                        if (!p.recipient_zip) return acc;
-                        return acc;
-                      }, 0))} mi
-                    </span>
+                    {chain.some(p => p.pair_type === "altruistic") && <span style={S.tag("#ffd166")}>ALTRUISTIC TRIGGERED</span>}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 0, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
                     {chain.map((pair, pi) => {
                       const nextPair = chain[(pi + 1) % chain.length];
                       const result = pi < chain.length - 1 ? calculateCompatibility(pair, nextPair) : null;
                       return (
                         <div key={pair.id} style={{ display: "flex", alignItems: "center" }}>
                           <div style={{ padding: "8px 14px", borderRadius: 8, background: "#111820", border: "1px solid #1e2a34", textAlign: "center" }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: "#c8d4dc" }}>{pair.donor_name?.split(" ")[0]}</div>
-                            <div style={{ fontSize: 10, color: "#3d5060", marginTop: 1 }}>donates to</div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: "#8a9aaa", marginTop: 1 }}>{nextPair ? nextPair.recipient_name?.split(" ")[0] : chain[0].recipient_name?.split(" ")[0]}</div>
-                            {result && (
-                              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: scoreStyle(result.score).text, marginTop: 4 }}>
-                                Score: {result.score}
-                              </div>
-                            )}
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "#c8d4dc" }}>{(pair.donor_name || "Altruistic").split(" ")[0]}</div>
+                            <div style={{ fontSize: 10, color: "#3d5060", marginTop: 1 }}>→</div>
+                            <div style={{ fontSize: 12, color: "#8a9aaa" }}>{nextPair ? (nextPair.recipient_name || "—").split(" ")[0] : (chain[0].recipient_name || "—").split(" ")[0]}</div>
+                            {result && <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: scoreStyle(result.score).text, marginTop: 3 }}>{result.score}</div>}
                           </div>
-                          {pi < chain.length - 1 && (
-                            <div style={{ padding: "0 8px", color: "#2dd4a0", fontSize: 16 }}>→</div>
-                          )}
+                          {pi < chain.length - 1 && <div style={{ padding: "0 6px", color: "#2dd4a0", fontSize: 14 }}>→</div>}
                         </div>
                       );
                     })}
-                    <div style={{ padding: "0 8px", color: "#3d5060", fontSize: 16 }}>↩</div>
+                    <div style={{ padding: "0 6px", color: "#3d5060", fontSize: 14 }}>↩</div>
                   </div>
-                  {chain.some(p => p.recipient_zip) && (
+                  {chain.some(p => p.recipient_zip || p.donor_zip) && (
                     <div style={{ marginTop: 10, fontSize: 11, color: "#4a5a6a" }}>
-                      ZIP codes: {chain.map(p => p.recipient_zip).filter(Boolean).join(" · ")}
+                      ZIP codes: {chain.map(p => p.recipient_zip || p.donor_zip).filter(Boolean).join(" · ")}
                     </div>
                   )}
                 </div>
               ))}
             </div>
           )}
-          <p style={{ marginTop: 16, fontSize: 11, color: "#2a3a4a", fontFamily: "'DM Mono', monospace" }}>
-            Chains update automatically as new pairs are added · All matches require crossmatch confirmation before any clinical decision
-          </p>
         </div>
       )}
 
-      {/* Dashboard View */}
+      {/* Dashboard */}
       {view === "dashboard" && (
         <div style={S.page}>
           <h1 style={S.pageTitle}>Dashboard</h1>
           <p style={S.subtitle}>Registry overview and summary statistics</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 24 }}>
             {[
-              { label: "Total Pairs", value: stats.total, color: "#5a6a7a" },
+              { label: "Total Entries", value: stats.total, color: "#5a6a7a" },
               { label: "Active", value: stats.active, color: "#2dd4a0" },
               { label: "High Urgency", value: stats.highUrgency, color: "#ff8a8a" },
-              { label: "With Match (70+)", value: stats.withMatch, color: "#6effc6" },
+              { label: "With Match 70+", value: stats.withMatch, color: "#6effc6" },
+              { label: "Altruistic Donors", value: stats.altruistic, color: "#ffd166" },
+              { label: "Seeking Donor", value: stats.recipientOnly, color: "#6ab4d0" },
               { label: "Completed", value: stats.completed, color: "#6ab4d0" },
-              { label: "Withdrawn", value: stats.withdrawn, color: "#5a6a7a" },
               { label: "2-Way Chains", value: stats.chains2, color: "#2dd4a0" },
               { label: "3-Way Chains", value: stats.chains3, color: "#6ab4d0" },
               { label: "4+ Way Chains", value: stats.chainsLong, color: "#ffd166" },
             ].map(({ label, value, color }) => (
               <div key={label} style={{ ...S.card, textAlign: "center" }}>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 32, fontWeight: 500, color, lineHeight: 1 }}>{value}</div>
-                <div style={{ fontSize: 11, color: "#5a6a7a", marginTop: 6, letterSpacing: "0.03em" }}>{label}</div>
+                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 30, fontWeight: 500, color, lineHeight: 1 }}>{value}</div>
+                <div style={{ fontSize: 11, color: "#5a6a7a", marginTop: 6 }}>{label}</div>
               </div>
             ))}
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {/* Blood type breakdown */}
             <div style={S.card}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 14 }}>RECIPIENT BLOOD TYPE DISTRIBUTION</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 14 }}>RECIPIENT BLOOD TYPE — ACTIVE PAIRS</div>
               {["A","B","AB","O"].map(bt => {
                 const count = activePairs.filter(p => p.recipient_blood_type === bt).length;
                 const pct = activePairs.length ? Math.round((count / activePairs.length) * 100) : 0;
@@ -687,168 +723,165 @@ export default function App() {
                       <span style={{ fontFamily: "'DM Mono', monospace", color: "#c8d4dc" }}>{count} <span style={{ color: "#5a6a7a" }}>({pct}%)</span></span>
                     </div>
                     <div style={{ height: 4, background: "#1a2530", borderRadius: 2 }}>
-                      <div style={{ height: "100%", width: `${pct}%`, background: "#2dd4a0", borderRadius: 2, transition: "width 0.5s" }} />
+                      <div style={{ height: "100%", width: `${pct}%`, background: "#2dd4a0", borderRadius: 2 }} />
                     </div>
                   </div>
                 );
               })}
             </div>
-
-            {/* Urgency breakdown */}
             <div style={S.card}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 14 }}>URGENCY BREAKDOWN (ACTIVE PAIRS)</div>
-              {["High","Medium","Low"].map(u => {
-                const count = activePairs.filter(p => p.urgency === u).length;
-                const pct = activePairs.length ? Math.round((count / activePairs.length) * 100) : 0;
-                return (
-                  <div key={u} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
-                      <span style={{ color: "#8a9aaa", display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: URGENCY_COLORS[u], display: "inline-block" }}/>
-                        {u}
-                      </span>
-                      <span style={{ fontFamily: "'DM Mono', monospace", color: "#c8d4dc" }}>{count} <span style={{ color: "#5a6a7a" }}>({pct}%)</span></span>
-                    </div>
-                    <div style={{ height: 4, background: "#1a2530", borderRadius: 2 }}>
-                      <div style={{ height: "100%", width: `${pct}%`, background: URGENCY_COLORS[u], borderRadius: 2, transition: "width 0.5s" }} />
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{ marginTop: 16, padding: "10px 12px", borderRadius: 8, background: "#0a1a14", border: "1px solid #1a3028" }}>
-                <div style={{ fontSize: 11, color: "#3d6a50" }}>High urgency with no match yet</div>
-                <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 22, color: "#ff8a8a", marginTop: 4 }}>
-                  {activePairs.filter(p => p.urgency === "High" && !activePairs.some(d => d.id !== p.id && calculateCompatibility(d,p).score >= 70)).length}
-                </div>
-              </div>
-            </div>
-
-            {/* No match found */}
-            <div style={S.card}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 14 }}>PAIRS WITH NO COMPATIBLE MATCH YET</div>
-              {activePairs.filter(p => !activePairs.some(d => d.id !== p.id && calculateCompatibility(d,p).score >= 70)).length === 0 ? (
-                <div style={{ fontSize: 13, color: "#2dd4a0" }}>All active pairs have at least one compatible match ✓</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 14 }}>HIGH URGENCY — NO MATCH YET</div>
+              {activePairs.filter(p => p.urgency === "High" && p.recipient_blood_type && !activePairs.some(d => d.id !== p.id && d.donor_blood_type && calculateCompatibility(d,p).score >= 70)).length === 0 ? (
+                <div style={{ fontSize: 13, color: "#2dd4a0" }}>All high urgency pairs have at least one compatible match ✓</div>
               ) : (
-                activePairs.filter(p => !activePairs.some(d => d.id !== p.id && calculateCompatibility(d,p).score >= 70)).map(p => (
+                activePairs.filter(p => p.urgency === "High" && p.recipient_blood_type && !activePairs.some(d => d.id !== p.id && d.donor_blood_type && calculateCompatibility(d,p).score >= 70)).map(p => (
                   <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: URGENCY_COLORS[p.urgency], flexShrink: 0 }} />
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ff8a8a", flexShrink: 0 }} />
                     <span style={{ color: "#c8d4dc" }}>{p.recipient_name}</span>
                     <span style={{ color: "#5a6a7a" }}>· {p.recipient_blood_type} · PRA {p.recipient_pra_percent || "?"}%</span>
                   </div>
                 ))
               )}
             </div>
-
-            {/* Recent activity */}
-            <div style={S.card}>
-              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 14 }}>RECENT PAIRS</div>
-              {pairs.slice(0, 6).map(p => (
-                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, fontSize: 12 }}>
-                  <span style={{ color: "#c8d4dc" }}>{p.recipient_name}</span>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <span style={S.tag(URGENCY_COLORS[p.urgency] || "#5a6a7a")}>{p.urgency}</span>
-                    <span style={{ color: "#3a4a5a", fontFamily: "'DM Mono', monospace", fontSize: 11 }}>
-                      {p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}
 
-      {/* Add / Edit Pair */}
+      {/* Add / Edit */}
       {view === "add" && (
         <div style={{ ...S.page, maxWidth: 960 }}>
-          <h1 style={S.pageTitle}>{editingPair ? "Edit Pair" : "Register New Pair"}</h1>
-          <p style={S.subtitle}>
-            {editingPair ? "Update clinical details for this pair." : "PairPath calculates compatibility against all active pairs automatically."}
-          </p>
+          <h1 style={S.pageTitle}>{editingPair ? "Edit Entry" : "Register New Entry"}</h1>
+          <p style={S.subtitle}>All entries are made by transplant coordinators on behalf of patients.</p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
-            {[
-              { title: "Recipient", color: "#3d8c6e", prefix: "recipient" },
-              { title: "Donor", color: "#2d6e8c", prefix: "donor" },
-            ].map(({ title, color, prefix }) => (
-              <div key={prefix} style={S.card}>
+          {!editingPair && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+              {PAIR_TYPES.map(({ value, label, desc }) => (
+                <button key={value} onClick={() => setForm(f => ({ ...f, pair_type: value }))}
+                  style={{ padding: 16, borderRadius: 10, border: `2px solid ${form.pair_type === value ? "#2dd4a0" : "#1a2530"}`, background: form.pair_type === value ? "#0d2a1e" : "#0d1219", cursor: "pointer", textAlign: "left", transition: "all 0.15s" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: form.pair_type === value ? "#2dd4a0" : "#c8d4dc", marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 12, color: "#5a6a7a" }}>{desc}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: form.pair_type === "paired" ? "1fr 1fr" : "1fr", gap: 20, marginBottom: 20 }}>
+            {(form.pair_type === "paired" || form.pair_type === "recipient_only") && (
+              <div style={S.card}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                  <div style={{ width: 3, height: 18, borderRadius: 2, background: color }} />
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, color: "#e8e4dc" }}>{title}</span>
-                  <span style={{ marginLeft: "auto", fontSize: 11, color: "#3a4a5a" }}>* required</span>
+                  <div style={{ width: 3, height: 18, borderRadius: 2, background: "#3d8c6e" }} />
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, color: "#e8e4dc" }}>Recipient</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <Field label={`${title} Full Name *`} value={form[`${prefix}_name`]} onChange={v => setForm(f => ({ ...f, [`${prefix}_name`]: v }))} S={S} />
+                  <Field label="Full Name *" value={form.recipient_name} onChange={v => setForm(f => ({ ...f, recipient_name: v }))} />
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     <div>
                       <label style={S.label}>BLOOD TYPE *</label>
-                      <select value={form[`${prefix}_blood_type`]} onChange={e => setForm(f => ({ ...f, [`${prefix}_blood_type`]: e.target.value }))} style={S.select}>
+                      <select value={form.recipient_blood_type} onChange={e => setForm(f => ({ ...f, recipient_blood_type: e.target.value }))} style={S.select}>
                         {["A","B","AB","O"].map(o => <option key={o}>{o}</option>)}
                       </select>
                     </div>
-                    <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form[`${prefix}_year_born`]} onChange={v => setForm(f => ({ ...f, [`${prefix}_year_born`]: v }))} S={S} />
+                    <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form.recipient_year_born} onChange={v => setForm(f => ({ ...f, recipient_year_born: v }))} />
                   </div>
+                  <Field label="PRA %" type="number" placeholder="0–100" value={form.recipient_pra_percent} onChange={v => setForm(f => ({ ...f, recipient_pra_percent: v }))} />
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <Field label="Weight (kg)" type="number" value={form[`${prefix}_weight_kg`]} onChange={v => setForm(f => ({ ...f, [`${prefix}_weight_kg`]: v }))} S={S} />
-                    <Field label="Height (cm)" type="number" value={form[`${prefix}_height_cm`]} onChange={v => setForm(f => ({ ...f, [`${prefix}_height_cm`]: v }))} S={S} />
+                    <Field label="Weight (kg)" type="number" value={form.recipient_weight_kg} onChange={v => setForm(f => ({ ...f, recipient_weight_kg: v }))} />
+                    <Field label="Height (cm)" type="number" value={form.recipient_height_cm} onChange={v => setForm(f => ({ ...f, recipient_height_cm: v }))} />
                   </div>
-                  {prefix === "recipient" && (
-                    <Field label="PRA %" type="number" placeholder="0–100" value={form.recipient_pra_percent} onChange={v => setForm(f => ({ ...f, recipient_pra_percent: v }))} S={S} />
-                  )}
-                  {prefix === "donor" && (
-                    <Field label="eGFR (mL/min)" type="number" value={form.donor_egfr} onChange={v => setForm(f => ({ ...f, donor_egfr: v }))} S={S} />
-                  )}
                   <div>
                     <label style={S.label}>CMV STATUS</label>
-                    <select value={form[`${prefix}_cmv`]} onChange={e => setForm(f => ({ ...f, [`${prefix}_cmv`]: e.target.value }))} style={S.select}>
+                    <select value={form.recipient_cmv} onChange={e => setForm(f => ({ ...f, recipient_cmv: e.target.value }))} style={S.select}>
                       {["Unknown","Positive","Negative"].map(o => <option key={o}>{o}</option>)}
                     </select>
                   </div>
-
-                  {/* HLA Section */}
-                  <div style={{ borderTop: "1px solid #1a2530", paddingTop: 12, marginTop: 4 }}>
+                  <div style={{ borderTop: "1px solid #1a2530", paddingTop: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                       <label style={{ ...S.label, marginBottom: 0 }}>HLA TYPING <span style={{ color: "#2a3a4a" }}>(optional)</span></label>
                       <button onClick={() => setShowHLAAdvanced(v => !v)} style={{ background: "none", border: "none", color: "#3d8c6e", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>
-                        {showHLAAdvanced ? "▲ hide fields" : "▼ individual fields"}
+                        {showHLAAdvanced ? "▲ hide" : "▼ individual fields"}
                       </button>
                     </div>
-                    <Field label="HLA Notes (paste Epic output)" placeholder="e.g. A*02:01, A*24:02, B*07:02..." value={form[`${prefix}_hla_notes`]} onChange={v => setForm(f => ({ ...f, [`${prefix}_hla_notes`]: v }))} S={S} />
+                    <Field label="HLA Notes (paste Epic output)" placeholder="e.g. A*02:01 A*24:02 B*07:02..." value={form.recipient_hla_notes} onChange={v => setForm(f => ({ ...f, recipient_hla_notes: v }))} />
                     {showHLAAdvanced && (
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8 }}>
                         {["A1","A2","B1","B2","DR1","DR2"].map(h => (
                           <div key={h}>
                             <label style={{ ...S.label, fontSize: 9 }}>HLA-{h}</label>
-                            <input value={form[`${prefix}_hla_${h.toLowerCase()}`]} onChange={e => setForm(f => ({ ...f, [`${prefix}_hla_${h.toLowerCase()}`]: e.target.value }))}
-                              style={{ ...S.input, padding: "6px 8px", fontSize: 12, fontFamily: "'DM Mono', monospace" }} />
+                            <input value={form[`recipient_hla_${h.toLowerCase()}`]} onChange={e => setForm(f => ({ ...f, [`recipient_hla_${h.toLowerCase()}`]: e.target.value }))} style={{ ...S.input, padding: "6px 8px", fontSize: 12, fontFamily: "'DM Mono', monospace" }} />
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-
-                  {prefix === "recipient" && (
-                    <>
-                      <Field label="Dialysis Start Date" type="date" value={form.recipient_dialysis_start} onChange={v => setForm(f => ({ ...f, recipient_dialysis_start: v }))} S={S} />
-                      <Field label="Prior Transplants" type="number" placeholder="0" value={form.recipient_prior_transplants} onChange={v => setForm(f => ({ ...f, recipient_prior_transplants: v }))} S={S} />
-                      <Field label="Sensitisation History Notes" placeholder="Prior transplants, pregnancies, transfusions…" value={form.recipient_sensitisation_notes} onChange={v => setForm(f => ({ ...f, recipient_sensitisation_notes: v }))} S={S} />
-                      <Field label="Crossmatch (Virtual)" placeholder="Negative / Positive / Pending" value={form.recipient_crossmatch_virtual} onChange={v => setForm(f => ({ ...f, recipient_crossmatch_virtual: v }))} S={S} />
-                      <Field label="Crossmatch (Physical/Lab)" placeholder="Negative / Positive / Pending" value={form.recipient_crossmatch_physical} onChange={v => setForm(f => ({ ...f, recipient_crossmatch_physical: v }))} S={S} />
-                    </>
-                  )}
-                  {prefix === "donor" && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <input type="checkbox" id="backup" checked={form.donor_backup} onChange={e => setForm(f => ({ ...f, donor_backup: e.target.checked }))} />
-                      <label htmlFor="backup" style={{ fontSize: 12, color: "#8a9aaa", cursor: "pointer" }}>Designated backup donor</label>
-                    </div>
-                  )}
-                  <Field label="ZIP Code" placeholder="e.g. 94109" value={form[`${prefix === "recipient" ? "recipient" : "donor"}_zip`] || form.recipient_zip} onChange={v => setForm(f => ({ ...f, [`${prefix}_zip`]: v }))} S={S} />
+                  <Field label="Dialysis Start Date" type="date" value={form.recipient_dialysis_start} onChange={v => setForm(f => ({ ...f, recipient_dialysis_start: v }))} />
+                  <Field label="Prior Transplants" type="number" placeholder="0" value={form.recipient_prior_transplants} onChange={v => setForm(f => ({ ...f, recipient_prior_transplants: v }))} />
+                  <Field label="Sensitisation History Notes" placeholder="Prior transplants, pregnancies, transfusions…" value={form.recipient_sensitisation_notes} onChange={v => setForm(f => ({ ...f, recipient_sensitisation_notes: v }))} />
+                  <Field label="Crossmatch Virtual" placeholder="Negative / Positive / Pending" value={form.recipient_crossmatch_virtual} onChange={v => setForm(f => ({ ...f, recipient_crossmatch_virtual: v }))} />
+                  <Field label="Crossmatch Physical/Lab" placeholder="Negative / Positive / Pending" value={form.recipient_crossmatch_physical} onChange={v => setForm(f => ({ ...f, recipient_crossmatch_physical: v }))} />
+                  <Field label="ZIP Code" placeholder="e.g. 94109" value={form.recipient_zip} onChange={v => setForm(f => ({ ...f, recipient_zip: v }))} />
                 </div>
               </div>
-            ))}
+            )}
+
+            {(form.pair_type === "paired" || form.pair_type === "altruistic") && (
+              <div style={S.card}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <div style={{ width: 3, height: 18, borderRadius: 2, background: "#2d6e8c" }} />
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, color: "#e8e4dc" }}>
+                    {form.pair_type === "altruistic" ? "Altruistic Donor" : "Donor"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <Field label="Full Name *" value={form.donor_name} onChange={v => setForm(f => ({ ...f, donor_name: v }))} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div>
+                      <label style={S.label}>BLOOD TYPE *</label>
+                      <select value={form.donor_blood_type} onChange={e => setForm(f => ({ ...f, donor_blood_type: e.target.value }))} style={S.select}>
+                        {["A","B","AB","O"].map(o => <option key={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form.donor_year_born} onChange={v => setForm(f => ({ ...f, donor_year_born: v }))} />
+                  </div>
+                  <Field label="eGFR (mL/min)" type="number" value={form.donor_egfr} onChange={v => setForm(f => ({ ...f, donor_egfr: v }))} />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <Field label="Weight (kg)" type="number" value={form.donor_weight_kg} onChange={v => setForm(f => ({ ...f, donor_weight_kg: v }))} />
+                    <Field label="Height (cm)" type="number" value={form.donor_height_cm} onChange={v => setForm(f => ({ ...f, donor_height_cm: v }))} />
+                  </div>
+                  <div>
+                    <label style={S.label}>CMV STATUS</label>
+                    <select value={form.donor_cmv} onChange={e => setForm(f => ({ ...f, donor_cmv: e.target.value }))} style={S.select}>
+                      {["Unknown","Positive","Negative"].map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ borderTop: "1px solid #1a2530", paddingTop: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <label style={{ ...S.label, marginBottom: 0 }}>HLA TYPING <span style={{ color: "#2a3a4a" }}>(optional)</span></label>
+                      <button onClick={() => setShowHLAAdvanced(v => !v)} style={{ background: "none", border: "none", color: "#3d8c6e", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono', monospace" }}>
+                        {showHLAAdvanced ? "▲ hide" : "▼ individual fields"}
+                      </button>
+                    </div>
+                    <Field label="HLA Notes (paste Epic output)" placeholder="e.g. A*01 A*03 B*08 B*35..." value={form.donor_hla_notes} onChange={v => setForm(f => ({ ...f, donor_hla_notes: v }))} />
+                    {showHLAAdvanced && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8 }}>
+                        {["A1","A2","B1","B2","DR1","DR2"].map(h => (
+                          <div key={h}>
+                            <label style={{ ...S.label, fontSize: 9 }}>HLA-{h}</label>
+                            <input value={form[`donor_hla_${h.toLowerCase()}`]} onChange={e => setForm(f => ({ ...f, [`donor_hla_${h.toLowerCase()}`]: e.target.value }))} style={{ ...S.input, padding: "6px 8px", fontSize: 12, fontFamily: "'DM Mono', monospace" }} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input type="checkbox" id="backup" checked={form.donor_backup} onChange={e => setForm(f => ({ ...f, donor_backup: e.target.checked }))} />
+                    <label htmlFor="backup" style={{ fontSize: 12, color: "#8a9aaa", cursor: "pointer" }}>Designated backup donor</label>
+                  </div>
+                  <Field label="ZIP Code" placeholder="e.g. 94109" value={form.donor_zip} onChange={v => setForm(f => ({ ...f, donor_zip: v }))} />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Pair-level fields */}
           <div style={{ ...S.card, marginBottom: 20 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <div>
@@ -857,41 +890,32 @@ export default function App() {
                   {["High","Medium","Low"].map(u => <option key={u} value={u}>{u} — {URGENCY_DEFS[u].split(".")[0]}</option>)}
                 </select>
               </div>
-              <div>
-                <label style={S.label}>DONOR-RECIPIENT RELATIONSHIP</label>
-                <select value={form.recipient_relationship} onChange={e => setForm(f => ({ ...f, recipient_relationship: e.target.value }))} style={S.select}>
-                  {["","Spouse/Partner","Parent","Sibling","Child","Friend","Altruistic Stranger","Other"].map(r => <option key={r} value={r}>{r || "Select…"}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={S.label}>PAIR TYPE</label>
-                <select value={form.pair_type} onChange={e => setForm(f => ({ ...f, pair_type: e.target.value }))} style={S.select}>
-                  <option value="paired">Paired — incompatible donor/recipient</option>
-                  <option value="altruistic">Altruistic donor (no paired recipient)</option>
-                  <option value="recipient_only">Recipient seeking altruistic donor</option>
-                </select>
-              </div>
-              {mode === "national" && (
-                <Field label="Transplant Centre" placeholder="e.g. Sutter CPMC" value={form.centre} onChange={v => setForm(f => ({ ...f, centre: v }))} S={S} />
+              {form.pair_type === "paired" && (
+                <div>
+                  <label style={S.label}>DONOR-RECIPIENT RELATIONSHIP</label>
+                  <select value={form.recipient_relationship} onChange={e => setForm(f => ({ ...f, recipient_relationship: e.target.value }))} style={S.select}>
+                    {["","Spouse/Partner","Parent","Sibling","Child","Friend","Other"].map(r => <option key={r} value={r}>{r || "Select…"}</option>)}
+                  </select>
+                </div>
               )}
+              <div>
+                <label style={S.label}>TRANSPLANT CENTRE</label>
+                <input value={form.centre || userMeta.centre || ""} onChange={e => setForm(f => ({ ...f, centre: e.target.value }))} style={S.input} placeholder={userMeta.centre || "Your centre"} />
+              </div>
             </div>
             <div style={{ marginTop: 12 }}>
               <label style={S.label}>CLINICAL NOTES</label>
-              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                placeholder="Any clinical context, flags, or coordinator notes…"
-                style={{ ...S.input, minHeight: 70, resize: "vertical", fontFamily: "'DM Sans', sans-serif" }} />
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any clinical context, flags, or coordinator notes…"
+                style={{ ...S.input, minHeight: 70, resize: "vertical" }} />
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 12 }}>
-            <button onClick={handleAdd} disabled={adding || !form.recipient_name || !form.donor_name}
-              style={{ ...S.btn, background: "#2dd4a0", color: "#0a1a14", opacity: (!form.recipient_name || !form.donor_name) ? 0.4 : 1 }}>
-              {adding ? (editingPair ? "Saving…" : "Registering…") : (editingPair ? "Save Changes" : "Register Pair")}
+            <button onClick={handleAdd} disabled={adding} style={{ ...S.btn, background: "#2dd4a0", color: "#0a1a14" }}>
+              {adding ? (editingPair ? "Saving…" : "Registering…") : (editingPair ? "Save Changes" : "Register")}
             </button>
             <button onClick={() => { setView("grid"); setEditingPair(null); setForm(emptyForm); }}
-              style={{ ...S.btn, background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a" }}>
-              Cancel
-            </button>
+              style={{ ...S.btn, background: "transparent", border: "1px solid #1e2a34", color: "#5a6a7a" }}>Cancel</button>
           </div>
         </div>
       )}
@@ -916,12 +940,11 @@ export default function App() {
                 <div style={{ fontSize: 11, color: `${s.text}cc`, marginTop: 4, letterSpacing: "0.1em" }}>{s.label.toUpperCase()}</div>
               </div>
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
               {[
                 { label: "ABO Compatibility", value: result.reasons.abo ? "Compatible" : "Incompatible", ok: result.reasons.abo, detail: `${donor.donor_blood_type} → ${recipient.recipient_blood_type}` },
                 { label: "HLA Mismatches", value: `${result.reasons.hlaMismatches} / 6`, ok: result.reasons.hlaMismatches <= 2, warn: result.reasons.hlaMismatches <= 4, detail: "0 = perfect · 6 = full mismatch" },
-                { label: "PRA Sensitization", value: `${recipient.recipient_pra_percent || "?"}%`, ok: !result.reasons.highSensitization, detail: result.reasons.highSensitization ? "Highly sensitized — harder to match" : "Acceptable level" },
+                { label: "PRA Sensitization", value: `${recipient.recipient_pra_percent || "?"}%`, ok: !result.reasons.highSensitization, detail: result.reasons.highSensitization ? "Highly sensitized" : "Acceptable level" },
                 { label: "Size Compatibility", value: result.reasons.sizeMatch ? "Acceptable" : "Flag", ok: result.reasons.sizeMatch, detail: `Donor ${donor.donor_weight_kg || "?"}kg → Recipient ${recipient.recipient_weight_kg || "?"}kg` },
                 { label: "CMV Risk", value: result.reasons.cmvRisk ? "Risk Flagged" : "Acceptable", ok: !result.reasons.cmvRisk, detail: `Donor ${donor.donor_cmv} / Recipient ${recipient.recipient_cmv}` },
                 { label: "Age Gap", value: donorAge && recipientAge ? `${result.reasons.ageDiff} yrs` : "Unknown", ok: !result.reasons.ageFlag, detail: `Donor ${donorAge || "?"}y · Recipient ${recipientAge || "?"}y · >15yr gap flagged` },
@@ -929,7 +952,7 @@ export default function App() {
                 { label: "Virtual Crossmatch", value: recipient.recipient_crossmatch_virtual || "Not recorded", ok: recipient.recipient_crossmatch_virtual === "Negative", detail: "Negative = compatible" },
               ].map(({ label, value, ok, warn, detail }) => (
                 <div key={label} style={{ ...S.card, borderColor: ok ? "#1a3028" : warn ? "#2a2010" : "#2a1010" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 12, color: "#5a6a7a" }}>{label}</span>
                     <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: ok ? "#2dd4a0" : warn ? "#ffd166" : "#ff8a8a" }}>{value}</span>
                   </div>
@@ -937,23 +960,17 @@ export default function App() {
                 </div>
               ))}
             </div>
-
-            {/* HLA comparison */}
             <div style={{ ...S.card, marginBottom: 16 }}>
               <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", letterSpacing: "0.1em", marginBottom: 12 }}>HLA ALLELE COMPARISON</div>
               {(donor.donor_hla_notes || recipient.recipient_hla_notes) && (
                 <div style={{ marginBottom: 12, fontSize: 12, color: "#5a6a7a" }}>
-                  {donor.donor_hla_notes && <div>Donor HLA: <span style={{ fontFamily: "'DM Mono', monospace", color: "#6ab4d0" }}>{donor.donor_hla_notes}</span></div>}
-                  {recipient.recipient_hla_notes && <div style={{ marginTop: 4 }}>Recipient HLA: <span style={{ fontFamily: "'DM Mono', monospace", color: "#6ad0a0" }}>{recipient.recipient_hla_notes}</span></div>}
+                  {donor.donor_hla_notes && <div>Donor: <span style={{ fontFamily: "'DM Mono', monospace", color: "#6ab4d0" }}>{donor.donor_hla_notes}</span></div>}
+                  {recipient.recipient_hla_notes && <div style={{ marginTop: 4 }}>Recipient: <span style={{ fontFamily: "'DM Mono', monospace", color: "#6ad0a0" }}>{recipient.recipient_hla_notes}</span></div>}
                 </div>
               )}
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr>
-                    {["LOCUS","DONOR","RECIPIENT","MISMATCHES"].map(h => (
-                      <th key={h} style={{ textAlign: h === "LOCUS" ? "left" : "center", padding: "6px 10px", fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", fontWeight: 400 }}>{h}</th>
-                    ))}
-                  </tr>
+                  <tr>{["LOCUS","DONOR","RECIPIENT","MM"].map(h => <th key={h} style={{ textAlign: h==="LOCUS"?"left":"center", padding: "6px 10px", fontFamily: "'DM Mono', monospace", fontSize: 10, color: "#3d5060", fontWeight: 400 }}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {["A","B","DR"].map(locus => {
@@ -972,29 +989,13 @@ export default function App() {
                 </tbody>
               </table>
             </div>
-
             <div style={{ padding: "12px 16px", borderRadius: 8, background: "#0d1a14", border: "1px solid #1a3028", fontSize: 12, color: "#3d6a50" }}>
-              ⚠ PairPath compatibility scores are computational screens only. All potential matches require crossmatch confirmation before any clinical decision. 
+              ⚠ Compatibility scores are computational screens only. All matches require crossmatch confirmation before any clinical decision.
             </div>
           </div>
         );
       })()}
-
-      <style>{`
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
-        select option { background: #111820; color: #c8d4dc; }
-        input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
-      `}</style>
-    </div>
-  );
-}
-
-function Field({ label, value, onChange, type = "text", placeholder, S }) {
-  return (
-    <div>
-      <label style={S.label}>{label.toUpperCase()}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        style={{ ...S.input, fontFamily: type === "number" || type === "date" ? "'DM Mono', monospace" : "'DM Sans', sans-serif" }} />
+      <style>{`select option{background:#111820;color:#c8d4dc;}input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.5);}`}</style>
     </div>
   );
 }
