@@ -394,11 +394,45 @@ export default function App() {
   const fileRef=useRef();
   const pendingFile=useRef(null);
 
-  useEffect(()=>{
-    supabase.auth.getSession().then(({data:{session}})=>{setSession(session);setAuthLoading(false);});
-    const{data:{subscription}}=supabase.auth.onAuthStateChange((_,s)=>setSession(s));
-    return()=>subscription.unsubscribe();
-  },[]);
+ useEffect(() => {
+  let mounted = true;
+
+  async function initAuth() {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("Supabase auth error:", error);
+      }
+
+      if (mounted) {
+        setSession(data?.session || null);
+      }
+    } catch (err) {
+      console.error("Auth init failed:", err);
+
+      if (mounted) {
+        setSession(null);
+      }
+    } finally {
+      if (mounted) {
+        setAuthLoading(false);
+      }
+    }
+  }
+
+  initAuth();
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    setSession(s);
+    setAuthLoading(false);
+  });
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, []);
 
   useEffect(()=>{
     if(!session) return;
