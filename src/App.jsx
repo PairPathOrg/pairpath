@@ -53,11 +53,15 @@ function calculateCompatibility(donor, recipient) {
 // ── Chain Engine ───────────────────────────────────────────────────────────
 function findChains(pairs) {
   const active = pairs.filter(p => p.status === "active");
+  const MAX_RESULTS = 30;
+  const MAX_DEPTH = 4;
+
   const donors = active.filter(p => p.donor_blood_type).map(p => ({
     id: `d-${p.id}`, pairId: p.id, blood: p.donor_blood_type,
     name: p.donor_name || "Altruistic Donor", weight: p.donor_weight_kg,
     cmv: p.donor_cmv, year: p.donor_year_born, pair_type: p.pair_type,
   }));
+
   const recipients = active.filter(p => p.recipient_blood_type).map(p => ({
     id: `r-${p.id}`, pairId: p.id, blood: p.recipient_blood_type,
     name: p.recipient_name, weight: p.recipient_weight_kg,
@@ -72,33 +76,74 @@ function findChains(pairs) {
     return Math.max(0, 70 - (highPRA ? 20 : 0) - (sizeOk ? 0 : 10) - (cmvRisk ? 5 : 0));
   }
 
+  const edges = new Map();
+  donors.forEach(donor => {
+    const matches = recipients
+      .filter(r => r.pairId !== donor.pairId)
+      .map(r => ({ recipient: r, score: score(donor, r) }))
+      .filter(m => m.score >= 40)
+      .sort((a,b) => b.score - a.score)
+      .slice(0, 8);
+    edges.set(donor.pairId, matches);
+  });
+
+  const donorByPair = new Map(donors.map(d => [d.pairId, d]));
   const chains = [];
   const seen = new Set();
 
-  for (const startDonor of donors) {
-    const usedPairs = new Set([startDonor.pairId]);
-    const chain = [];
-
-    function dfs(donor) {
-      for (const recipient of recipients) {
-        if (usedPairs.has(recipient.pairId)) continue;
-        const s = score(donor, recipient);
-        if (s < 40) continue;
-        chain.push({ donorName: donor.name, donorBlood: donor.blood, donorPairId: donor.pairId, recipientName: recipient.name, recipientBlood: recipient.blood, recipientPairId: recipient.pairId, score: s, altruistic: donor.pair_type === "altruistic" });
-        if (chain.length >= 2) {
-          const key = chain.map(c => c.donorPairId).sort().join("-");
-          if (!seen.has(key)) { seen.add(key); chains.push([...chain]); }
-        }
-        if (chain.length < 8) {
-          const nextDonor = donors.find(d => d.pairId === recipient.pairId && !usedPairs.has(d.pairId));
-          if (nextDonor) { usedPairs.add(recipient.pairId); dfs(nextDonor); usedPairs.delete(recipient.pairId); }
-        }
-        chain.pop();
-      }
+  function addChain(chain) {
+    if (chain.length < 2) return;
+    const key = chain.map(c => `${c.donorPairId}->${c.recipientPairId}`).join('|');
+    if (!seen.has(key)) {
+      seen.add(key);
+      chains.push([...chain]);
     }
-    dfs(startDonor);
   }
-  return chains.sort((a,b) => b.length - a.length || b.reduce((s,c)=>s+c.score,0) - a.reduce((s,c)=>s+c.score,0)).slice(0, 30);
+
+  function dfs(donor, usedPairs, chain) {
+    if (chains.length >= MAX_RESULTS) return;
+    const matches = edges.get(donor.pairId) || [];
+
+    for (const { recipient, score: s } of matches) {
+      if (chains.length >= MAX_RESULTS) return;
+      if (usedPairs.has(recipient.pairId)) continue;
+
+      const step = {
+        donorName: donor.name,
+        donorBlood: donor.blood,
+        donorPairId: donor.pairId,
+        recipientName: recipient.name,
+        recipientBlood: recipient.blood,
+        recipientPairId: recipient.pairId,
+        score: s,
+        altruistic: donor.pair_type === "altruistic"
+      };
+
+      chain.push(step);
+      addChain(chain);
+
+      if (chain.length < MAX_DEPTH) {
+        const nextDonor = donorByPair.get(recipient.pairId);
+        if (nextDonor) {
+          usedPairs.add(recipient.pairId);
+          dfs(nextDonor, usedPairs, chain);
+          usedPairs.delete(recipient.pairId);
+        }
+      }
+
+      chain.pop();
+    }
+  }
+
+  donors.forEach(startDonor => {
+    if (chains.length >= MAX_RESULTS) return;
+    dfs(startDonor, new Set([startDonor.pairId]), []);
+  });
+
+  return chains.sort((a,b) =>
+    b.length - a.length ||
+    b.reduce((sum,c)=>sum+c.score,0) - a.reduce((sum,c)=>sum+c.score,0)
+  ).slice(0, MAX_RESULTS);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
