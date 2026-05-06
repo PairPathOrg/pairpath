@@ -461,6 +461,18 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview }) {
   );
 }
 
+// ── Demo Data ──────────────────────────────────────────────────────────────
+const DEMO_PAIRS = [
+  {id:"d1",pair_type:"paired",status:"active",urgency:"High",recipient_name:"Maria Santos",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"Carlos Santos",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
+  {id:"d2",pair_type:"paired",status:"active",urgency:"High",recipient_name:"James Okafor",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"Adaeze Okafor",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
+  {id:"d3",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Linda Park",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"David Park",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
+  {id:"d4",pair_type:"altruistic",status:"active",urgency:"Medium",donor_name:"Robert Chen",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
+  {id:"d5",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Sarah Williams",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"Thomas Williams",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
+  {id:"d6",pair_type:"recipient_only",status:"active",urgency:"High",recipient_name:"Fatima Al-Hassan",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
+  {id:"d7",pair_type:"paired",status:"active",urgency:"Low",recipient_name:"Michael Torres",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"Elena Torres",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
+  {id:"d8",pair_type:"paired",status:"matched",urgency:"High",recipient_name:"Dorothy Kim",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"Steven Kim",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
+];
+
 // ── Main App ───────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null);
@@ -553,6 +565,21 @@ export default function App() {
     return()=>supabase.removeChannel(ch);
   },[session]);
 
+  // ── Async chain computation (off main thread via setTimeout yield) ─────────
+  useEffect(()=>{
+    if(view!=="chains") return;
+    setChainsLoading(true);
+    const timeout=setTimeout(()=>{
+      try{
+        const vp=demoMode?DEMO_PAIRS:(pairs);
+        const result=findChains(vp);
+        setComputedChains(result);
+      }catch(e){setComputedChains([]);}
+      setChainsLoading(false);
+    },0);
+    return()=>clearTimeout(timeout);
+  },[view,pairs,demoMode]);
+
   if(authLoading) return <div style={{minHeight:"100vh",background:"#0a0e14",display:"flex",alignItems:"center",justifyContent:"center",color:"#3d8c6e",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
   if(!session) return <AuthScreen/>;
 
@@ -561,16 +588,6 @@ export default function App() {
   const isAdmin=userMeta.role==="admin";
   // Solo mode: own records only. National mode: all records (read), but edit/delete still gated by ownership.
   // Demo mode overlays fake data so real registry is untouched.
-  const DEMO_PAIRS = [
-    {id:"d1",pair_type:"paired",status:"active",urgency:"High",recipient_name:"Maria Santos",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"Carlos Santos",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
-    {id:"d2",pair_type:"paired",status:"active",urgency:"High",recipient_name:"James Okafor",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"Adaeze Okafor",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
-    {id:"d3",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Linda Park",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"David Park",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
-    {id:"d4",pair_type:"altruistic",status:"active",urgency:"Medium",donor_name:"Robert Chen",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
-    {id:"d5",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Sarah Williams",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"Thomas Williams",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
-    {id:"d6",pair_type:"recipient_only",status:"active",urgency:"High",recipient_name:"Fatima Al-Hassan",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
-    {id:"d7",pair_type:"paired",status:"active",urgency:"Low",recipient_name:"Michael Torres",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"Elena Torres",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
-    {id:"d8",pair_type:"paired",status:"matched",urgency:"High",recipient_name:"Dorothy Kim",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"Steven Kim",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
-  ];
   const visiblePairs=demoMode?DEMO_PAIRS:(appMode==="national"?pairs:(isAdmin?pairs:pairs.filter(p=>p.user_id===currentUserId)));
   const activePairs=visiblePairs.filter(p=>p.status==="active");
 
@@ -602,26 +619,12 @@ export default function App() {
     else if(sortBy==="dialysis"){va=new Date(a.recipient_dialysis_start||0);vb=new Date(b.recipient_dialysis_start||0);}
     else if(sortBy==="score"){
       const donors=activePairs.filter(p=>p.donor_blood_type);
-      va=a.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==a.id).map(d=>calculateCompatibility(d,a).score)):0;
-      vb=b.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==b.id).map(d=>calculateCompatibility(d,b).score)):0;
+      va=a.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==a.id).map(d=>calculateCompatibility(d,a).score??0)):0;
+      vb=b.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==b.id).map(d=>calculateCompatibility(d,b).score??0)):0;
     }
     else{va=a.recipient_name||"";vb=b.recipient_name||"";}
     return sortDir==="desc"?(va>vb?-1:1):(va>vb?1:-1);
   });
-
-  // ── Async chain computation (off main thread via setTimeout yield) ─────────
-  useEffect(()=>{
-    if(view!=="chains") return;
-    setChainsLoading(true);
-    const timeout=setTimeout(()=>{
-      try{
-        const result=findChains(visiblePairs);
-        setComputedChains(result);
-      }catch(e){setComputedChains([]);}
-      setChainsLoading(false);
-    },0);
-    return()=>clearTimeout(timeout);
-  },[view,visiblePairs.length]);
 
   const chains=computedChains;
   const stats={
