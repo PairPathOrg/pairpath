@@ -103,7 +103,7 @@ function calculateCompatibility(donor, recipient) {
 function findChains(pairs) {
   const active = pairs.filter(p => p.status === "active");
   const MAX_RESULTS = 20;
-  const MAX_DEPTH = 4;
+  const MAX_DEPTH = 6;
 
   const donors = active.filter(p => p.donor_blood_type).map(p => ({
     id: `d-${p.id}`, pairId: p.id, blood: p.donor_blood_type,
@@ -633,7 +633,7 @@ export default function App() {
     recipientOnly:visiblePairs.filter(p=>p.pair_type==="recipient_only").length,
     chains2:chains.filter(c=>c.length===2).length,
     chains3:chains.filter(c=>c.length===3).length,
-    chainsLong:chains.filter(c=>c.length>3).length,
+    chainsLong:chains.filter(c=>c.length>=4).length,
   };
 
   function isDuplicate(f,excludeId=null){
@@ -1164,7 +1164,7 @@ export default function App() {
       {view==="chains"&&(
         <div style={S.page}>
           <h1 style={S.pageTitle}>Chain Identification</h1>
-          <p style={S.subtitle}>Compatible exchange chains across all active pairs. Capped at 4-way depth and 30 results for performance.</p>
+          <p style={S.subtitle}>Compatible exchange chains across all active pairs. Chains longer than 6-way are rare in practice and logistically complex to coordinate.</p>
           {chainsLoading?(
             <div style={{textAlign:"center",padding:60,color:"#3d8c6e",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
           ):chains.length===0?(
