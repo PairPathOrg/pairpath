@@ -138,16 +138,14 @@ function findChains(pairs) {
   });
 
   const donorByPair = new Map(donors.map(d => [d.pairId, d]));
-  const chains = [];
-  // Dedup by sorted set of pair IDs involved — prevents near-duplicates
-  const seenPairSets = new Set();
+  const allChains = [];
 
   function dfs(donor, usedPairs, chain) {
-    if (chains.length >= MAX_RESULTS) return;
+    if (allChains.length >= 200) return;
     const matches = edges.get(donor.pairId) || [];
 
     for (const { recipient, score: s } of matches) {
-      if (chains.length >= MAX_RESULTS) return;
+      if (allChains.length >= 200) return;
       if (usedPairs.has(recipient.pairId)) continue;
 
       const step = {
@@ -163,15 +161,8 @@ function findChains(pairs) {
 
       chain.push(step);
 
-      // Only save chains of length >= 2, and deduplicate by the full ordered path
       if (chain.length >= 2) {
-        const pathKey = chain.map(c => `${c.donorPairId}->${c.recipientPairId}`).join('|');
-        // Also deduplicate by unordered pair set to suppress near-duplicate variations
-        const pairSetKey = [...usedPairs, recipient.pairId].sort().join(',');
-        if (!seenPairSets.has(pairSetKey)) {
-          seenPairSets.add(pairSetKey);
-          chains.push([...chain]);
-        }
+        allChains.push([...chain]);
       }
 
       if (chain.length < MAX_DEPTH) {
@@ -188,11 +179,35 @@ function findChains(pairs) {
   }
 
   donors.forEach(startDonor => {
-    if (chains.length >= MAX_RESULTS) return;
+    if (allChains.length >= 200) return;
     dfs(startDonor, new Set([startDonor.pairId]), []);
   });
 
-  return chains.sort((a,b) =>
+  // Remove chains whose full donor sequence is a prefix of a longer chain —
+  // i.e. suppress "Marcus→Patrick→Brigid→Carmen→David" if
+  // "Marcus→Patrick→Brigid→Carmen→Sinead→X" already exists with the same 4 starts.
+  // Key each chain by its ordered donor pair IDs.
+  const donorSequence = chain => chain.map(c => c.donorPairId).join(',');
+
+  // Keep only chains where no longer chain starts with the same donor sequence
+  const filtered = allChains.filter(chain => {
+    const seq = donorSequence(chain);
+    return !allChains.some(other =>
+      other.length > chain.length &&
+      donorSequence(other).startsWith(seq)
+    );
+  });
+
+  // Among remaining, deduplicate by exact donor sequence
+  const seenSeqs = new Set();
+  const deduped = filtered.filter(chain => {
+    const seq = donorSequence(chain);
+    if (seenSeqs.has(seq)) return false;
+    seenSeqs.add(seq);
+    return true;
+  });
+
+  return deduped.sort((a,b) =>
     b.length - a.length ||
     b.reduce((sum,c)=>sum+c.score,0) - a.reduce((sum,c)=>sum+c.score,0)
   ).slice(0, MAX_RESULTS);
