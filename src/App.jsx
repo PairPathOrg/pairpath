@@ -198,9 +198,8 @@ function findChains(pairs) {
 // ── Pair Score display helpers ─────────────────────────────────────────────
 function scoreStyle(score, aboOnly) {
   if (score === null || score === undefined) {
-    // ABO-only or no data — no numeric score shown
     return aboOnly
-      ? { bg: "#1a2a1a", text: "#6ab4d0", label: "ABO ✓ — HLA needed" }
+      ? { bg: "#0d3a2a", text: "#4ab89a", label: "ABO ✓ — HLA needed" }  // muted teal — compatible but unscored
       : { bg: "#2a1010", text: "#ff8a8a", label: "ABO Incompatible" };
   }
   if (score >= 75) return { bg: "#0d6e4a", text: "#6effc6", label: "Strong" };
@@ -999,15 +998,11 @@ export default function App() {
                             onClick={()=>openDetail(donor,recipient)}
                             title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+result.reasons.hlaMismatches} | ${s.label}`}
                             style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
-                            {result.score===null?(
-                              <div style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:500,color:s.text,lineHeight:1}}>
-                                {result.reasons.abo?"ABO ✓":"✗"}
-                              </div>
-                            ):(
-                              <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
-                            )}
+                            <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>
+                              {result.score!==null?result.score:(result.reasons.abo?"✓":"✗")}
+                            </div>
                             <div style={{fontSize:9,color:`${s.text}99`,marginTop:3}}>
-                              {result.score===null?(result.reasons.abo?"HLA needed":"incompat"):(`${result.reasons.hlaMismatches}MM`)}
+                              {result.score!==null?`${result.reasons.hlaMismatches}MM`:(result.reasons.abo?"ABO":"incompat")}
                             </div>
                           </td>
                         );
