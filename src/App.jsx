@@ -102,7 +102,7 @@ function calculateCompatibility(donor, recipient) {
 // ── Chain Engine ───────────────────────────────────────────────────────────
 function findChains(pairs) {
   const active = pairs.filter(p => p.status === "active");
-  const MAX_RESULTS = 30;
+  const MAX_RESULTS = 20;
   const MAX_DEPTH = 4;
 
   const donors = active.filter(p => p.donor_blood_type).map(p => ({
@@ -123,7 +123,6 @@ function findChains(pairs) {
     const praPoints = pra > 80 ? 25 : pra > 50 ? 18 : 15;
     const sizeOk = Math.abs((donor.weight || 70) - (recipient.weight || 70)) < 40;
     const cmvRisk = donor.cmv === "Positive" && recipient.cmv === "Negative";
-    // HLA not available in chain engine context — use ABO + PRA + modifiers, cap at 70
     return Math.max(0, Math.min(70, praPoints + 45 - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0)));
   }
 
@@ -134,22 +133,14 @@ function findChains(pairs) {
       .map(r => ({ recipient: r, score: score(donor, r) }))
       .filter(m => m.score >= 40)
       .sort((a,b) => b.score - a.score)
-      .slice(0, 8);
+      .slice(0, 6);
     edges.set(donor.pairId, matches);
   });
 
   const donorByPair = new Map(donors.map(d => [d.pairId, d]));
   const chains = [];
-  const seen = new Set();
-
-  function addChain(chain) {
-    if (chain.length < 2) return;
-    const key = chain.map(c => `${c.donorPairId}->${c.recipientPairId}`).join('|');
-    if (!seen.has(key)) {
-      seen.add(key);
-      chains.push([...chain]);
-    }
-  }
+  // Dedup by sorted set of pair IDs involved — prevents near-duplicates
+  const seenPairSets = new Set();
 
   function dfs(donor, usedPairs, chain) {
     if (chains.length >= MAX_RESULTS) return;
@@ -171,7 +162,17 @@ function findChains(pairs) {
       };
 
       chain.push(step);
-      addChain(chain);
+
+      // Only save chains of length >= 2, and deduplicate by the full ordered path
+      if (chain.length >= 2) {
+        const pathKey = chain.map(c => `${c.donorPairId}->${c.recipientPairId}`).join('|');
+        // Also deduplicate by unordered pair set to suppress near-duplicate variations
+        const pairSetKey = [...usedPairs, recipient.pairId].sort().join(',');
+        if (!seenPairSets.has(pairSetKey)) {
+          seenPairSets.add(pairSetKey);
+          chains.push([...chain]);
+        }
+      }
 
       if (chain.length < MAX_DEPTH) {
         const nextDonor = donorByPair.get(recipient.pairId);
