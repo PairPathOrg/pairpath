@@ -62,13 +62,15 @@ function calculateCompatibility(donor, recipient) {
   // No number shown without HLA — only ABO status
   if (!aboOk) {
     return {
-      compatible: false, score: null, aboOnly: !hasHLA,
+      compatible: false, score: 0, aboOnly: !hasHLA,
       reasons: { abo: false, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
     };
   }
   if (!hasHLA) {
+    // ABO compatible but no HLA — return a capped score so grid stays colorful
+    const aboScore = Math.max(0, 70 - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0) - (ageFlag ? 3 : 0));
     return {
-      compatible: true, score: null, aboOnly: true,
+      compatible: true, score: aboScore, aboOnly: true,
       reasons: { abo: true, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
     };
   }
@@ -197,15 +199,9 @@ function findChains(pairs) {
 
 // ── Pair Score display helpers ─────────────────────────────────────────────
 function scoreStyle(score, aboOnly) {
-  if (score === null || score === undefined) {
-    return aboOnly
-      ? { bg: "#0d3a2a", text: "#4ab89a", label: "ABO ✓ — HLA needed" }  // muted teal — compatible but unscored
-      : { bg: "#2a1010", text: "#ff8a8a", label: "ABO Incompatible" };
-  }
-  if (score >= 75) return { bg: "#0d6e4a", text: "#6effc6", label: "Strong" };
-  if (score >= 55) return { bg: "#1a3a1a", text: "#2dd4a0", label: "Good" };
-  if (score >= 35) return { bg: "#6b4a00", text: "#ffd166", label: "Marginal" };
-  return { bg: "#6e0d0d", text: "#ff8a8a", label: "Poor" };
+  if (score >= 70) return { bg: "#0d6e4a", text: "#6effc6", label: aboOnly ? "ABO Compatible" : "Compatible" };
+  if (score >= 40) return { bg: "#6b4a00", text: "#ffd166", label: aboOnly ? "ABO Marginal" : "Marginal" };
+  return { bg: "#6e0d0d", text: "#ff8a8a", label: "Incompatible" };
 }
 
 const URGENCY_COLORS = { High: "#ff8a8a", Medium: "#ffd166", Low: "#6effc6" };
@@ -618,8 +614,8 @@ export default function App() {
     else if(sortBy==="dialysis"){va=new Date(a.recipient_dialysis_start||0);vb=new Date(b.recipient_dialysis_start||0);}
     else if(sortBy==="score"){
       const donors=activePairs.filter(p=>p.donor_blood_type);
-      va=a.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==a.id).map(d=>calculateCompatibility(d,a).score??0)):0;
-      vb=b.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==b.id).map(d=>calculateCompatibility(d,b).score??0)):0;
+      va=a.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==a.id).map(d=>calculateCompatibility(d,a).score||0)):0;
+      vb=b.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==b.id).map(d=>calculateCompatibility(d,b).score||0)):0;
     }
     else{va=a.recipient_name||"";vb=b.recipient_name||"";}
     return sortDir==="desc"?(va>vb?-1:1):(va>vb?1:-1);
@@ -998,12 +994,8 @@ export default function App() {
                             onClick={()=>openDetail(donor,recipient)}
                             title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+result.reasons.hlaMismatches} | ${s.label}`}
                             style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
-                            <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>
-                              {result.score!==null?result.score:(result.reasons.abo?"✓":"✗")}
-                            </div>
-                            <div style={{fontSize:9,color:`${s.text}99`,marginTop:3}}>
-                              {result.score!==null?`${result.reasons.hlaMismatches}MM`:(result.reasons.abo?"ABO":"incompat")}
-                            </div>
+                            <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
+                            <div style={{fontSize:9,color:`${s.text}99`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches}MM`}</div>
                           </td>
                         );
                       })}
@@ -1100,7 +1092,7 @@ export default function App() {
             {filteredPairs.map(pair=>{
               const canEdit=pair.user_id===currentUserId||isAdmin;
               const donorPairs=activePairs.filter(p=>p.donor_blood_type);
-              const matches=pair.recipient_blood_type?donorPairs.filter(d=>d.id!==pair.id).map(d=>({donor:d,result:calculateCompatibility(d,pair)})).filter(m=>m.result.reasons.abo).sort((a,b)=>(b.result.score??-1)-(a.result.score??-1)):[];
+              const matches=pair.recipient_blood_type?donorPairs.filter(d=>d.id!==pair.id).map(d=>({donor:d,result:calculateCompatibility(d,pair)})).filter(m=>m.result.reasons.abo).sort((a,b)=>(b.result.score||0)-(a.result.score||0)):[];
               const best=matches[0]||null;
               const bs=best?scoreStyle(best.result.score,best.result.aboOnly):null;
               const dAge=calcAge(pair.donor_year_born),rAge=calcAge(pair.recipient_year_born);
