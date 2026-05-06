@@ -22,31 +22,78 @@ function countHLAMismatches(donor, recipient) {
   return mm;
 }
 
+// ── Pair Score Engine ──────────────────────────────────────────────────────
+// PairPath "Pair Score" — a computational screening tool, NOT a validated
+// clinical index. Score is 0–100 when full HLA data is present.
+// When HLA data is missing, no numeric score is shown — only ABO status.
+//
+// Weighting rationale (⚠ REVISIT WITH TRANSPLANT PROFESSIONALS before clinical use):
+//   Primary (60pts)  : HLA mismatches — 0MM=60, each MM costs 10pts, floor 0
+//   Secondary (25pts): PRA sensitization — high PRA recipient who IS matched
+//                      gets a BONUS (hardest match to find = most valuable).
+//                      Unmatched high PRA costs 15pts vs low PRA baseline.
+//   Modifiers (15pts): CMV D+/R- risk (-8), size mismatch >40kg (-4), age gap >15yr (-3)
+//
+// TODO: Validate weights against published KPD outcomes data.
+// TODO: Consider dialysis vintage (time on dialysis) as a prioritization factor.
+// TODO: Crossmatch result should override score entirely if available.
 function calculateCompatibility(donor, recipient) {
   if (!donor?.donor_blood_type || !recipient?.recipient_blood_type) {
-    return { compatible: false, score: 0, partial: true, aboOnly: false, reasons: {} };
+    return { compatible: false, score: null, aboOnly: true, reasons: {} };
   }
+
   const aboOk = checkABO(donor.donor_blood_type, recipient.recipient_blood_type);
   const hasHLA = !!(donor.donor_hla_a1 || donor.donor_hla_notes || recipient.recipient_hla_a1 || recipient.recipient_hla_notes);
+
   const hlaMismatches = hasHLA ? countHLAMismatches(donor, recipient) : 0;
-  const highPRA = (recipient.recipient_pra_percent || 0) > 80;
+  const pra = recipient.recipient_pra_percent || 0;
+  const highPRA = pra > 80;
+  const moderatePRA = pra > 50 && pra <= 80;
   const sizeDiff = Math.abs((donor.donor_weight_kg || 70) - (recipient.recipient_weight_kg || 70));
   const sizeOk = sizeDiff < 40;
   const cmvRisk = donor.donor_cmv === "Positive" && recipient.recipient_cmv === "Negative";
   const dAge = calcAge(donor.donor_year_born), rAge = calcAge(recipient.recipient_year_born);
   const ageDiff = dAge && rAge ? Math.abs(dAge - rAge) : 0;
   const ageFlag = ageDiff > 15;
-  const bmi = donor.donor_weight_kg && donor.donor_height_cm ? donor.donor_weight_kg / Math.pow(donor.donor_height_cm / 100, 2) : null;
+  const bmi = donor.donor_weight_kg && donor.donor_height_cm
+    ? donor.donor_weight_kg / Math.pow(donor.donor_height_cm / 100, 2) : null;
   const bmiFlag = bmi && bmi > 35;
-  const score = aboOk
-    ? hasHLA
-      ? Math.max(0, 100 - hlaMismatches * 10 - (highPRA ? 20 : 0) - (sizeOk ? 0 : 10) - (cmvRisk ? 5 : 0) - (ageFlag ? 8 : 0) - (bmiFlag ? 5 : 0))
-      : Math.max(0, 70 - (highPRA ? 20 : 0) - (sizeOk ? 0 : 10) - (cmvRisk ? 5 : 0) - (ageFlag ? 8 : 0))
-    : 0;
+
+  // No number shown without HLA — only ABO status
+  if (!aboOk) {
+    return {
+      compatible: false, score: null, aboOnly: !hasHLA,
+      reasons: { abo: false, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
+    };
+  }
+  if (!hasHLA) {
+    return {
+      compatible: true, score: null, aboOnly: true,
+      reasons: { abo: true, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
+    };
+  }
+
+  // Full scored path — 0 to 100
+  const hlaPoints = Math.max(0, 60 - hlaMismatches * 10);
+
+  // PRA: high PRA recipient successfully matched = clinical win, award points
+  const praPoints = highPRA ? 25 : moderatePRA ? 18 : 15;
+
+  // Modifiers (deductions only)
+  const cmvPenalty  = cmvRisk  ?  8 : 0;
+  const sizePenalty = sizeOk   ?  0 : 4;
+  const agePenalty  = ageFlag  ?  3 : 0;
+  const bmiPenalty  = bmiFlag  ?  2 : 0;
+
+  const score = Math.min(100, Math.max(0,
+    hlaPoints + praPoints - cmvPenalty - sizePenalty - agePenalty - bmiPenalty
+  ));
+
   return {
-    compatible: aboOk && (hasHLA ? hlaMismatches <= 4 : true),
-    score, partial: !hasHLA, aboOnly: !hasHLA,
-    reasons: { abo: aboOk, hlaMismatches, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff }
+    compatible: hlaMismatches <= 4,
+    score,
+    aboOnly: false,
+    reasons: { abo: true, hlaMismatches, highSensitization: highPRA, moderatePRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
   };
 }
 
@@ -70,10 +117,12 @@ function findChains(pairs) {
 
   function score(donor, recipient) {
     if (!checkABO(donor.blood, recipient.blood)) return 0;
-    const highPRA = (recipient.pra || 0) > 80;
+    const pra = recipient.pra || 0;
+    const praPoints = pra > 80 ? 25 : pra > 50 ? 18 : 15;
     const sizeOk = Math.abs((donor.weight || 70) - (recipient.weight || 70)) < 40;
     const cmvRisk = donor.cmv === "Positive" && recipient.cmv === "Negative";
-    return Math.max(0, 70 - (highPRA ? 20 : 0) - (sizeOk ? 0 : 10) - (cmvRisk ? 5 : 0));
+    // HLA not available in chain engine context — use ABO + PRA + modifiers, cap at 70
+    return Math.max(0, Math.min(70, praPoints + 45 - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0)));
   }
 
   const edges = new Map();
@@ -146,11 +195,18 @@ function findChains(pairs) {
   ).slice(0, MAX_RESULTS);
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Pair Score display helpers ─────────────────────────────────────────────
 function scoreStyle(score, aboOnly) {
-  if (score >= 70) return { bg: "#0d6e4a", text: "#6effc6", label: aboOnly ? "ABO Compatible" : "Compatible" };
-  if (score >= 40) return { bg: "#6b4a00", text: "#ffd166", label: aboOnly ? "ABO Marginal" : "Marginal" };
-  return { bg: "#6e0d0d", text: "#ff8a8a", label: "Incompatible" };
+  if (score === null || score === undefined) {
+    // ABO-only or no data — no numeric score shown
+    return aboOnly
+      ? { bg: "#1a2a1a", text: "#6ab4d0", label: "ABO ✓ — HLA needed" }
+      : { bg: "#2a1010", text: "#ff8a8a", label: "ABO Incompatible" };
+  }
+  if (score >= 75) return { bg: "#0d6e4a", text: "#6effc6", label: "Strong" };
+  if (score >= 55) return { bg: "#1a3a1a", text: "#2dd4a0", label: "Good" };
+  if (score >= 35) return { bg: "#6b4a00", text: "#ffd166", label: "Marginal" };
+  return { bg: "#6e0d0d", text: "#ff8a8a", label: "Poor" };
 }
 
 const URGENCY_COLORS = { High: "#ff8a8a", Medium: "#ffd166", Low: "#6effc6" };
@@ -436,6 +492,13 @@ export default function App() {
   const [csvMapper,setCsvMapper]=useState(null);
   const [uploadPairType,setUploadPairType]=useState("paired");
   const [showUploadTypeSelect,setShowUploadTypeSelect]=useState(false);
+  const [duplicateWarning,setDuplicateWarning]=useState(null);
+  const [pendingInsert,setPendingInsert]=useState(null);
+  const [demoMode,setDemoMode]=useState(false);
+  const [auditLog,setAuditLog]=useState([]);
+  const [showAudit,setShowAudit]=useState(false);
+  const [chainsLoading,setChainsLoading]=useState(false);
+  const [computedChains,setComputedChains]=useState([]);
   const fileRef=useRef();
   const pendingFile=useRef(null);
 
@@ -496,10 +559,28 @@ export default function App() {
   const currentUserId=session.user.id;
   const userMeta=session.user.user_metadata||{};
   const isAdmin=userMeta.role==="admin";
-  const activePairs=pairs.filter(p=>p.status==="active");
-  const centres=[...new Set(pairs.map(p=>p.centre).filter(Boolean))];
+  // Solo mode: own records only. National mode: all records (read), but edit/delete still gated by ownership.
+  // Demo mode overlays fake data so real registry is untouched.
+  const DEMO_PAIRS = [
+    {id:"d1",pair_type:"paired",status:"active",urgency:"High",recipient_name:"Maria Santos",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"Carlos Santos",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
+    {id:"d2",pair_type:"paired",status:"active",urgency:"High",recipient_name:"James Okafor",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"Adaeze Okafor",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
+    {id:"d3",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Linda Park",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"David Park",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
+    {id:"d4",pair_type:"altruistic",status:"active",urgency:"Medium",donor_name:"Robert Chen",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
+    {id:"d5",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Sarah Williams",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"Thomas Williams",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
+    {id:"d6",pair_type:"recipient_only",status:"active",urgency:"High",recipient_name:"Fatima Al-Hassan",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
+    {id:"d7",pair_type:"paired",status:"active",urgency:"Low",recipient_name:"Michael Torres",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"Elena Torres",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
+    {id:"d8",pair_type:"paired",status:"matched",urgency:"High",recipient_name:"Dorothy Kim",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"Steven Kim",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
+  ];
+  const visiblePairs=demoMode?DEMO_PAIRS:(appMode==="national"?pairs:(isAdmin?pairs:pairs.filter(p=>p.user_id===currentUserId)));
+  const activePairs=visiblePairs.filter(p=>p.status==="active");
 
-  const filteredPairs=pairs.filter(p=>{
+  function addAudit(action,detail){
+    if(demoMode) return;
+    setAuditLog(prev=>[{action,detail,user:userMeta.full_name||session.user.email,time:new Date().toLocaleString(),id:Date.now()},...prev].slice(0,100));
+  }
+  const centres=[...new Set(visiblePairs.map(p=>p.centre).filter(Boolean))];
+
+  const filteredPairs=visiblePairs.filter(p=>{
     if(filterStatus!=="all"&&p.status!==filterStatus) return false;
     if(filterUrgency!=="all"&&p.urgency!==filterUrgency) return false;
     if(filterBlood!=="all"&&p.recipient_blood_type!==filterBlood) return false;
@@ -519,44 +600,112 @@ export default function App() {
     else if(sortBy==="lastname"){va=(a.recipient_name||"").split(" ").pop();vb=(b.recipient_name||"").split(" ").pop();}
     else if(sortBy==="pra"){va=parseFloat(a.recipient_pra_percent||0);vb=parseFloat(b.recipient_pra_percent||0);}
     else if(sortBy==="dialysis"){va=new Date(a.recipient_dialysis_start||0);vb=new Date(b.recipient_dialysis_start||0);}
+    else if(sortBy==="score"){
+      const donors=activePairs.filter(p=>p.donor_blood_type);
+      va=a.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==a.id).map(d=>calculateCompatibility(d,a).score)):0;
+      vb=b.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==b.id).map(d=>calculateCompatibility(d,b).score)):0;
+    }
     else{va=a.recipient_name||"";vb=b.recipient_name||"";}
     return sortDir==="desc"?(va>vb?-1:1):(va>vb?1:-1);
   });
 
-  const chains=findChains(pairs);
+  // ── Async chain computation (off main thread via setTimeout yield) ─────────
+  useEffect(()=>{
+    if(view!=="chains") return;
+    setChainsLoading(true);
+    const timeout=setTimeout(()=>{
+      try{
+        const result=findChains(visiblePairs);
+        setComputedChains(result);
+      }catch(e){setComputedChains([]);}
+      setChainsLoading(false);
+    },0);
+    return()=>clearTimeout(timeout);
+  },[view,visiblePairs.length]);
+
+  const chains=computedChains;
   const stats={
-    total:pairs.length,active:activePairs.length,
+    total:visiblePairs.length,active:activePairs.length,
     highUrgency:activePairs.filter(p=>p.urgency==="High").length,
-    completed:pairs.filter(p=>p.status==="completed").length,
-    withdrawn:pairs.filter(p=>p.status==="withdrawn").length,
+    completed:visiblePairs.filter(p=>p.status==="completed").length,
+    withdrawn:visiblePairs.filter(p=>p.status==="withdrawn").length,
     withMatch:activePairs.filter(p=>p.recipient_blood_type&&activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length,
-    altruistic:pairs.filter(p=>p.pair_type==="altruistic").length,
-    recipientOnly:pairs.filter(p=>p.pair_type==="recipient_only").length,
+    altruistic:visiblePairs.filter(p=>p.pair_type==="altruistic").length,
+    recipientOnly:visiblePairs.filter(p=>p.pair_type==="recipient_only").length,
     chains2:chains.filter(c=>c.length===2).length,
     chains3:chains.filter(c=>c.length===3).length,
     chainsLong:chains.filter(c=>c.length>3).length,
   };
 
+  function isDuplicate(f,excludeId=null){
+    return pairs.some(p=>{
+      if(excludeId&&p.id===excludeId) return false;
+      const dName=(p.donor_name||"").trim().toLowerCase();
+      const rName=(p.recipient_name||"").trim().toLowerCase();
+      const fDName=(f.donor_name||"").trim().toLowerCase();
+      const fRName=(f.recipient_name||"").trim().toLowerCase();
+      if(f.pair_type==="altruistic") return dName&&dName===fDName;
+      if(f.pair_type==="recipient_only") return rName&&rName===fRName;
+      return dName&&rName&&dName===fDName&&rName===fRName;
+    });
+  }
+
+  async function doInsert(insertData){
+    if(editingPair){
+      await supabase.from("pairs").update(insertData).eq("id",editingPair);
+      addAudit("EDIT",`Edited ${insertData.recipient_name||insertData.donor_name}`);
+      setEditingPair(null);
+    } else {
+      const{data,error}=await supabase.from("pairs").insert([insertData]).select();
+      if(!error&&data){
+        setFlash(data[0].id);setTimeout(()=>setFlash(null),2500);
+        addAudit("ADD",`Added ${insertData.recipient_name||insertData.donor_name} (${insertData.pair_type})`);
+      }
+    }
+    setForm(emptyForm);setView("grid");setAdding(false);setPendingInsert(null);
+  }
+
   async function handleAdd(){
+    if(demoMode){setFlash(null);alert("Demo mode is active — disable it to save real entries.");return;}
     const needsR=form.pair_type!=="altruistic",needsD=form.pair_type!=="recipient_only";
     if(needsR&&!form.recipient_name) return;
     if(needsD&&!form.donor_name) return;
     setAdding(true);
     const insertData={...form,status:form.status||"active",user_id:currentUserId,donor_backup:form.donor_backup===true||form.donor_backup==="true"};
     NUMERIC_FIELDS.forEach(k=>{if(insertData[k]===""||insertData[k]===undefined)insertData[k]=null;});
-    if(editingPair){await supabase.from("pairs").update(insertData).eq("id",editingPair);setEditingPair(null);}
-    else{const{data,error}=await supabase.from("pairs").insert([insertData]).select();if(!error&&data){setFlash(data[0].id);setTimeout(()=>setFlash(null),2500);}}
-    setForm(emptyForm);setView("grid");setAdding(false);
+    if(isDuplicate(form,editingPair||undefined)){
+      setPendingInsert(insertData);setDuplicateWarning(form);setAdding(false);return;
+    }
+    await doInsert(insertData);
   }
 
-  async function handleDelete(id){await supabase.from("pairs").delete().eq("id",id);setDeleteConfirm(null);}
+  async function handleDelete(id){
+    if(demoMode) return;
+    const pair=pairs.find(p=>p.id===id);
+    if(!pair) return;
+    if(!isAdmin&&pair.user_id!==currentUserId){setFlash(null);return;}
+    await supabase.from("pairs").delete().eq("id",id);
+    addAudit("DELETE",`Deleted ${pair.recipient_name||pair.donor_name}`);
+    setDeleteConfirm(null);
+  }
 
   async function handleBulkDelete(){
-    await Promise.all([...selectedIds].map(id=>supabase.from("pairs").delete().eq("id",id)));
+    if(demoMode) return;
+    const idsToDelete=isAdmin
+      ?[...selectedIds]
+      :[...selectedIds].filter(id=>{const p=pairs.find(r=>r.id===id);return p&&p.user_id===currentUserId;});
+    const names=idsToDelete.map(id=>{const p=pairs.find(r=>r.id===id);return p?.recipient_name||p?.donor_name||id;});
+    await Promise.all(idsToDelete.map(id=>supabase.from("pairs").delete().eq("id",id)));
+    addAudit("BULK DELETE",`Deleted ${idsToDelete.length} entries: ${names.join(", ")}`);
     setSelectedIds(new Set());setBulkDeleteConfirm(false);
   }
 
-  async function handleStatusChange(id,status){await supabase.from("pairs").update({status}).eq("id",id);}
+  async function handleStatusChange(id,status){
+    if(demoMode) return;
+    const pair=pairs.find(p=>p.id===id);
+    await supabase.from("pairs").update({status}).eq("id",id);
+    addAudit("STATUS",`${pair?.recipient_name||pair?.donor_name} → ${status}`);
+  }
 
   function openDetail(donor,recipient){const result=calculateCompatibility(donor,recipient);setSelected({donor,recipient,result});setView("detail");}
 
@@ -608,9 +757,14 @@ export default function App() {
         if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv))obj.recipient_cmv="Unknown";
         return obj;
       });
-      const{data,error}=await supabase.from("pairs").insert(records).select();
+      const dupes=records.filter(r=>isDuplicate(r));
+      const clean=records.filter(r=>!isDuplicate(r));
+      const{data,error}=await supabase.from("pairs").insert(clean).select();
       if(error)setUploadResult({success:false,message:error.message});
-      else setUploadResult({success:true,message:`${data.length} entries imported successfully`});
+      else{
+        addAudit("BULK IMPORT",`Imported ${data.length} entries via CSV`);
+        setUploadResult({success:true,message:`${data.length} entries imported.${dupes.length>0?` ${dupes.length} duplicate(s) skipped: ${dupes.map(d=>d.recipient_name||d.donor_name).join(", ")}.`:""}`});
+      }
     }catch(err){setUploadResult({success:false,message:"Import error — "+err.message});}
     setCsvMapper(null);setUploading(false);
   }
@@ -664,6 +818,52 @@ export default function App() {
         </div>
       )}
       {csvMapper&&<CSVMapper headers={csvMapper.headers} pairType={csvMapper.pairType} preview={csvMapper.preview} onConfirm={handleMappingConfirm} onCancel={()=>setCsvMapper(null)}/>}
+
+      {/* Duplicate Warning Modal */}
+      {duplicateWarning&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{...S.card,maxWidth:440,width:"90%",textAlign:"center"}}>
+            <div style={{fontSize:22,marginBottom:8}}>⚠️</div>
+            <div style={{fontSize:16,color:"#ffd166",marginBottom:8}}>Possible Duplicate Detected</div>
+            <div style={{fontSize:13,color:"#8a9aaa",marginBottom:6}}>
+              A record with this donor/recipient name pair already exists in the registry.
+            </div>
+            <div style={{fontFamily:"'DM Mono', monospace",fontSize:12,color:"#e8e4dc",padding:"8px 12px",background:"#111820",borderRadius:6,marginBottom:20}}>
+              {duplicateWarning.donor_name||"—"} / {duplicateWarning.recipient_name||"—"}
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button onClick={async()=>{setDuplicateWarning(null);setAdding(true);await doInsert(pendingInsert);}}
+                style={{...S.btn,background:"#6b4a00",color:"#ffd166"}}>Save Anyway</button>
+              <button onClick={()=>{setDuplicateWarning(null);setPendingInsert(null);setAdding(false);}}
+                style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Log Panel (admin only) */}
+      {showAudit&&isAdmin&&(
+        <div style={{position:"fixed",top:60,right:0,bottom:0,width:380,background:"#0d1219",borderLeft:"1px solid #1a2530",zIndex:500,overflowY:"auto",padding:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#6a7a8a",letterSpacing:"0.1em"}}>AUDIT LOG</div>
+            <button onClick={()=>setShowAudit(false)} style={{background:"none",border:"none",color:"#8a9aaa",cursor:"pointer",fontSize:18}}>×</button>
+          </div>
+          {auditLog.length===0?(
+            <div style={{fontSize:13,color:"#3a4a5a"}}>No actions logged this session.</div>
+          ):(
+            auditLog.map(entry=>(
+              <div key={entry.id} style={{borderTop:"1px solid #141c24",paddingTop:10,marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                  <span style={{...S.tag(entry.action==="DELETE"||entry.action==="BULK DELETE"?"#ff8a8a":entry.action==="ADD"||entry.action==="BULK IMPORT"?"#2dd4a0":"#ffd166")}}>{entry.action}</span>
+                  <span style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#3a4a5a"}}>{entry.time}</span>
+                </div>
+                <div style={{fontSize:12,color:"#8a9aaa",marginBottom:2}}>{entry.detail}</div>
+                <div style={{fontSize:11,color:"#3a4a5a"}}>{entry.user}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
       {matchDetail&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>setMatchDetail(null)}>
           <div style={{...S.card,maxWidth:480,width:"90%"}} onClick={e=>e.stopPropagation()}>
@@ -671,11 +871,11 @@ export default function App() {
             <div style={{fontSize:14,color:"#e8e4dc",marginBottom:4}}>Recipient: <strong>{matchDetail.recipient.recipient_name}</strong></div>
             <div style={{fontSize:14,color:"#e8e4dc",marginBottom:20}}>Best Donor: <strong>{matchDetail.donor.donor_name||"Altruistic Donor"}</strong></div>
             {[
-              {label:"Compatibility Score",value:matchDetail.result.score,color:scoreStyle(matchDetail.result.score,matchDetail.result.aboOnly).text},
-              {label:"ABO",value:matchDetail.result.reasons.abo?"Compatible":"Incompatible",color:matchDetail.result.reasons.abo?"#2dd4a0":"#ff8a8a"},
-              {label:"HLA Mismatches",value:matchDetail.result.aboOnly?"HLA not yet entered":matchDetail.result.reasons.hlaMismatches,color:"#ffd166"},
-              {label:"PRA",value:`${matchDetail.recipient.recipient_pra_percent||"?"}%`,color:matchDetail.result.reasons.highSensitization?"#ff8a8a":"#2dd4a0"},
-              {label:"Score basis",value:matchDetail.result.aboOnly?"ABO only — add HLA for full score":"Full HLA score",color:"#6ab4d0"},
+              {label:"Pair Score",value:matchDetail.result.score!==null?matchDetail.result.score:"ABO ✓",color:scoreStyle(matchDetail.result.score,matchDetail.result.aboOnly).text},
+              {label:"ABO",value:matchDetail.result.reasons.abo?"Compatible ✓":"Incompatible ✗",color:matchDetail.result.reasons.abo?"#2dd4a0":"#ff8a8a"},
+              {label:"HLA Mismatches",value:matchDetail.result.aboOnly?"HLA not entered":matchDetail.result.reasons.hlaMismatches+" / 6",color:"#ffd166"},
+              {label:"PRA",value:`${matchDetail.recipient.recipient_pra_percent||"?"}%`,color:matchDetail.result.reasons.highSensitization?"#6ab4d0":"#2dd4a0"},
+              {label:"Score basis",value:matchDetail.result.aboOnly?"ABO only — enter HLA for Pair Score":"Full HLA score",color:"#6ab4d0"},
             ].map(({label,value,color})=>(
               <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid #141c24"}}>
                 <span style={{fontSize:12,color:"#8a9aaa"}}>{label}</span>
@@ -683,7 +883,7 @@ export default function App() {
               </div>
             ))}
             <div style={{display:"flex",gap:8,marginTop:16}}>
-              <button onClick={()=>{setMatchDetail(null);openDetail(matchDetail.donor,matchDetail.recipient);}} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0",flex:1}}>Full Compatibility Report</button>
+              <button onClick={()=>{setMatchDetail(null);openDetail(matchDetail.donor,matchDetail.recipient);}} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0",flex:1}}>Full Pair Score Report</button>
               <button onClick={()=>setMatchDetail(null)} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Close</button>
             </div>
           </div>
@@ -698,7 +898,12 @@ export default function App() {
             style={{...S.tag(appMode==="national"?"#6ab4d0":"#3d8c6e"),cursor:"pointer",border:"none",background:appMode==="national"?"#6ab4d022":"#3d8c6e22"}}>
             {appMode.toUpperCase()}
           </button>
-          {stats.highUrgency>0&&<span style={S.tag("#ff8a8a")}>{stats.highUrgency} HIGH URGENCY</span>}
+          <button onClick={()=>setDemoMode(m=>!m)}
+            style={{...S.tag(demoMode?"#ffd166":"#4a5a6a"),cursor:"pointer",border:`1px solid ${demoMode?"#ffd16644":"#2a3a4a"}`,background:demoMode?"#2a1e0022":"transparent",fontSize:10,padding:"2px 8px"}}>
+            {demoMode?"● DEMO":"DEMO"}
+          </button>
+          {demoMode&&<span style={{fontSize:11,color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>demo data — not saved</span>}
+          {stats.highUrgency>0&&!demoMode&&<span style={S.tag("#ff8a8a")}>{stats.highUrgency} HIGH URGENCY</span>}
         </div>
         <nav style={{display:"flex",gap:2}}>
           {[["grid","Grid"],["registry","Registry"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l])=>(
@@ -708,6 +913,7 @@ export default function App() {
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:12,color:"#8a9aaa"}}>{userMeta.full_name||session.user.email}</span>
           {isAdmin&&<span style={S.tag("#ffd166")}>Admin</span>}
+          {isAdmin&&<button onClick={()=>setShowAudit(v=>!v)} style={{...S.btn,padding:"4px 10px",background:showAudit?"#1a2e24":"transparent",border:"1px solid #1e2a34",color:"#8a9aaa",fontSize:11}}>Audit</button>}
           {userMeta.centre&&<span style={S.tag("#3d5060")}>{userMeta.centre}</span>}
           <div style={{width:7,height:7,borderRadius:"50%",background:"#2dd4a0"}}/>
           <span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#3d8c6e"}}>{activePairs.length} ACTIVE</span>
@@ -719,7 +925,7 @@ export default function App() {
       {view==="grid"&&(
         <div style={S.page}>
           <h1 style={S.pageTitle}>Compatibility Grid</h1>
-          <p style={S.subtitle}>Click any cell for a full breakdown. ABO scores are blood-type only — add HLA data for full scoring.</p>
+          <p style={S.subtitle}>Click any cell for a full breakdown. Pair Score is 0–100 when HLA data is entered. ABO ✓ shown when HLA is missing.</p>
           <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
             <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:140}}>
               <option value="all">All Blood Types</option>
@@ -730,7 +936,7 @@ export default function App() {
               {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
             </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
-              {[["Compatible","70+",80,false],["ABO Only","50-69",60,true],["Marginal","40-49",44,false],["Incompatible","<40",10,false]].map(([l,r,sc,ao])=>(
+              {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:11,color:"#8a9aaa",display:"flex",alignItems:"center",gap:5}}>
                   <span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:scoreStyle(sc,ao).bg}}/>
                   {l} ({r})
@@ -790,8 +996,16 @@ export default function App() {
                             onClick={()=>openDetail(donor,recipient)}
                             title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+result.reasons.hlaMismatches} | ${s.label}`}
                             style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
-                            <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
-                            <div style={{fontSize:9,color:`${s.text}99`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches}MM`}</div>
+                            {result.score===null?(
+                              <div style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:500,color:s.text,lineHeight:1}}>
+                                {result.reasons.abo?"ABO ✓":"✗"}
+                              </div>
+                            ):(
+                              <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
+                            )}
+                            <div style={{fontSize:9,color:`${s.text}99`,marginTop:3}}>
+                              {result.score===null?(result.reasons.abo?"HLA needed":"incompat"):(`${result.reasons.hlaMismatches}MM`)}
+                            </div>
                           </td>
                         );
                       })}
@@ -857,12 +1071,13 @@ export default function App() {
                 {centres.map(c=><option key={c}>{c}</option>)}
               </select>
             )}
-            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...S.select,width:180}}>
+            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...S.select,width:200}}>
               <option value="date">Sort: Date Added</option>
               <option value="lastname">Sort: Last Name</option>
               <option value="urgency">Sort: Urgency</option>
               <option value="pra">Sort: PRA % (High First)</option>
               <option value="dialysis">Sort: Dialysis Date</option>
+              <option value="score">Sort: Best Match Score ↓</option>
             </select>
             <button onClick={()=>setSortDir(d=>d==="desc"?"asc":"desc")} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa",padding:"9px 12px"}}>
               {sortDir==="desc"?"↓":"↑"}
@@ -887,7 +1102,7 @@ export default function App() {
             {filteredPairs.map(pair=>{
               const canEdit=pair.user_id===currentUserId||isAdmin;
               const donorPairs=activePairs.filter(p=>p.donor_blood_type);
-              const matches=pair.recipient_blood_type?donorPairs.filter(d=>d.id!==pair.id).map(d=>({donor:d,result:calculateCompatibility(d,pair)})).sort((a,b)=>b.result.score-a.result.score):[];
+              const matches=pair.recipient_blood_type?donorPairs.filter(d=>d.id!==pair.id).map(d=>({donor:d,result:calculateCompatibility(d,pair)})).filter(m=>m.result.reasons.abo).sort((a,b)=>(b.result.score??-1)-(a.result.score??-1)):[];
               const best=matches[0]||null;
               const bs=best?scoreStyle(best.result.score,best.result.aboOnly):null;
               const dAge=calcAge(pair.donor_year_born),rAge=calcAge(pair.recipient_year_born);
@@ -929,8 +1144,10 @@ export default function App() {
                     {bs&&(
                       <button onClick={()=>setMatchDetail({donor:best.donor,recipient:pair,result:best.result})}
                         style={{textAlign:"center",padding:"6px 12px",borderRadius:8,background:`${bs.bg}99`,border:"none",cursor:"pointer"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:18,color:bs.text,lineHeight:1}}>{best.result.score}</div>
-                        <div style={{fontSize:9,color:`${bs.text}88`,marginTop:2}}>BEST MATCH</div>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:18,color:bs.text,lineHeight:1}}>
+                          {best.result.score!==null?best.result.score:"ABO ✓"}
+                        </div>
+                        <div style={{fontSize:9,color:`${bs.text}88`,marginTop:2}}>{best.result.score!==null?"PAIR SCORE":"HLA NEEDED"}</div>
                       </button>
                     )}
                     <select value={pair.status} onChange={e=>handleStatusChange(pair.id,e.target.value)} disabled={!canEdit}
@@ -956,8 +1173,10 @@ export default function App() {
       {view==="chains"&&(
         <div style={S.page}>
           <h1 style={S.pageTitle}>Chain Identification</h1>
-          <p style={S.subtitle}>Compatible exchange chains across all active pairs. No length cap — updates automatically as new pairs are added.</p>
-          {chains.length===0?(
+          <p style={S.subtitle}>Compatible exchange chains across all active pairs. Capped at 4-way depth and 30 results for performance.</p>
+          {chainsLoading?(
+            <div style={{textAlign:"center",padding:60,color:"#3d8c6e",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
+          ):chains.length===0?(
             <div style={{textAlign:"center",padding:60,color:"#5a6a7a",fontSize:13}}>
               No compatible chains found yet — add incompatible pairs to identify exchange opportunities
             </div>
@@ -1068,8 +1287,8 @@ export default function App() {
               <div style={S.card}>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTRE</div>
                 {centres.map(c=>{
-                  const count=pairs.filter(p=>p.centre===c).length;
-                  const pct=pairs.length?Math.round((count/pairs.length)*100):0;
+                  const count=visiblePairs.filter(p=>p.centre===c).length;
+                  const pct=visiblePairs.length?Math.round((count/visiblePairs.length)*100):0;
                   return (
                     <div key={c} style={{marginBottom:10}}>
                       <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:12}}>
@@ -1275,25 +1494,30 @@ export default function App() {
             <button onClick={()=>setView("grid")} style={{background:"none",border:"none",color:"#3d8c6e",cursor:"pointer",fontFamily:"'DM Mono', monospace",fontSize:12,padding:0,marginBottom:24,letterSpacing:"0.05em"}}>← BACK TO GRID</button>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:28,flexWrap:"wrap",gap:16}}>
               <div>
-                <h1 style={S.pageTitle}>Compatibility Report</h1>
+                <h1 style={S.pageTitle}>Pair Score Report</h1>
                 <p style={{margin:"4px 0 0",color:"#8a9aaa",fontSize:13}}>{donor.donor_name} → {recipient.recipient_name}</p>
-                {result.aboOnly&&<p style={{margin:"4px 0 0",color:"#ffd166",fontSize:12}}>⚠ ABO-based score — add HLA data for full scoring</p>}
+                {result.aboOnly&&result.reasons.abo&&<p style={{margin:"6px 0 0",padding:"6px 10px",borderRadius:6,background:"#0d1e2e",border:"1px solid #1a3a5a",color:"#6ab4d0",fontSize:12,display:"inline-block"}}>ABO compatible ✓ — enter HLA data to generate a Pair Score</p>}
+                {!result.reasons.abo&&<p style={{margin:"6px 0 0",padding:"6px 10px",borderRadius:6,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:12,display:"inline-block"}}>ABO incompatible — exchange not possible without chain</p>}
               </div>
+              {result.score!==null&&(
               <div style={{textAlign:"center",padding:"14px 22px",borderRadius:12,background:s.bg,border:`1px solid ${s.text}33`}}>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:`${s.text}88`,letterSpacing:"0.1em",marginBottom:4}}>PAIR SCORE</div>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:40,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
                 <div style={{fontSize:11,color:`${s.text}cc`,marginTop:4,letterSpacing:"0.1em"}}>{s.label.toUpperCase()}</div>
+                <div style={{fontSize:10,color:`${s.text}66`,marginTop:6}}>out of 100</div>
               </div>
+              )}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
               {[
-                {label:"ABO Compatibility",value:result.reasons.abo?"Compatible":"Incompatible",ok:result.reasons.abo,detail:`${donor.donor_blood_type} → ${recipient.recipient_blood_type}`},
-                {label:"HLA Mismatches",value:result.aboOnly?"Not entered":result.reasons.hlaMismatches+" / 6",ok:!result.aboOnly&&result.reasons.hlaMismatches<=2,warn:!result.aboOnly&&result.reasons.hlaMismatches<=4,detail:result.aboOnly?"Enter HLA data for full scoring":"0 = perfect · 6 = full mismatch"},
-                {label:"PRA Sensitization",value:`${recipient.recipient_pra_percent||"?"}%`,ok:!result.reasons.highSensitization,detail:result.reasons.highSensitization?"Highly sensitized":"Acceptable level"},
-                {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:`Donor ${donor.donor_weight_kg||"?"}kg → Recipient ${recipient.recipient_weight_kg||"?"}kg`},
-                {label:"CMV Risk",value:result.reasons.cmvRisk?"Risk Flagged":"Acceptable",ok:!result.reasons.cmvRisk,detail:`Donor ${donor.donor_cmv} / Recipient ${recipient.recipient_cmv}`},
+                {label:"ABO Compatibility",value:result.reasons.abo?"Compatible ✓":"Incompatible ✗",ok:result.reasons.abo,detail:`${donor.donor_blood_type} → ${recipient.recipient_blood_type}`},
+                {label:"HLA Mismatches",value:result.aboOnly?"Not entered":result.reasons.hlaMismatches+" / 6",ok:!result.aboOnly&&result.reasons.hlaMismatches<=2,warn:!result.aboOnly&&result.reasons.hlaMismatches<=4,detail:result.aboOnly?"Enter HLA alleles for a Pair Score":"0 = perfect match · 6 = full mismatch · drives 60% of score"},
+                {label:"PRA Sensitization",value:`${recipient.recipient_pra_percent||"?"}%`,ok:result.reasons.highSensitization,warn:result.reasons.moderatePRA,detail:result.reasons.highSensitization?"Highly sensitized — match earns highest PRA bonus":result.reasons.moderatePRA?"Moderately sensitized — partial bonus if matched":"Low sensitization"},
+                {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:`Donor ${donor.donor_weight_kg||"?"}kg → Recipient ${recipient.recipient_weight_kg||"?"}kg · >40kg gap flagged`},
+                {label:"CMV Risk",value:result.reasons.cmvRisk?"D+/R− Risk":"Acceptable",ok:!result.reasons.cmvRisk,detail:`Donor ${donor.donor_cmv||"?"} / Recipient ${recipient.recipient_cmv||"?"} · D+/R− increases recipient risk`},
                 {label:"Age Gap",value:dAge&&rAge?`${result.reasons.ageDiff} yrs`:"Unknown",ok:!result.reasons.ageFlag,detail:`Donor ${dAge||"?"}y · Recipient ${rAge||"?"}y · >15yr gap flagged`},
                 {label:"Donor eGFR",value:donor.donor_egfr?`${donor.donor_egfr} mL/min`:"Not recorded",ok:(donor.donor_egfr||0)>=60,detail:(donor.donor_egfr||0)>=60?"Adequate renal function":"Below 60 — review required"},
-                {label:"Virtual Crossmatch",value:recipient.recipient_crossmatch_virtual||"Not recorded",ok:recipient.recipient_crossmatch_virtual==="Negative",detail:"Negative = compatible"},
+                {label:"Virtual Crossmatch",value:recipient.recipient_crossmatch_virtual||"Not recorded",ok:recipient.recipient_crossmatch_virtual==="Negative",detail:"Negative = no known antibody conflict · overrides score if available"},
               ].map(({label,value,ok,warn,detail})=>(
                 <div key={label} style={{...S.card,borderColor:ok?"#1a3028":warn?"#2a2010":"#2a1010"}}>
                   <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -1337,7 +1561,7 @@ export default function App() {
               <button onClick={()=>window.print()} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0"}}>Print Report</button>
             </div>
             <div style={{padding:"12px 16px",borderRadius:8,background:"#0d1a14",border:"1px solid #1a3028",fontSize:12,color:"#3d6a50"}}>
-              ⚠ Compatibility scores are computational screens only. All matches require crossmatch confirmation before any clinical decision.
+              ⚠ Pair Score is a computational screening tool, not a validated clinical index. Weights are provisional and should be reviewed with transplant professionals before operational use. All matches require crossmatch confirmation before any clinical decision.
             </div>
           </div>
         );
