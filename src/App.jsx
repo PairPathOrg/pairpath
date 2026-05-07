@@ -516,14 +516,14 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
       </div>
 
       {missingRequired.length > 0 && (
-        <div style={{padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:12,marginBottom:16}}>
-          Required fields not mapped: {missingRequired.map(f=>f.label).join(", ")}
+        <div style={{padding:"10px 14px",borderRadius:8,background:"#1a2a1a",border:"1px solid #1a3028",color:"#ffd166",fontSize:12,marginBottom:16}}>
+          ⚠ Recommended fields not mapped: {missingRequired.map(f=>f.label).join(", ")} — you can still import, unmapped fields will be blank.
         </div>
       )}
 
       <div style={{display:"flex",gap:10}}>
-        <button onClick={()=>onConfirm(cleanedMapping)} disabled={missingRequired.length>0}
-          style={{...S.btn,background:"#2dd4a0",color:"#0a1a14",opacity:missingRequired.length>0?0.4:1}}>
+        <button onClick={()=>onConfirm(cleanedMapping)}
+          style={{...S.btn,background:"#2dd4a0",color:"#0a1a14"}}>
           Import with This Mapping
         </button>
         <button onClick={onCancel} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>
