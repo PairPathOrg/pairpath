@@ -262,9 +262,15 @@ function downloadTemplate() {
 
 function exportRegistry(pairs) {
   if (!pairs.length) return;
+  const UNIT_LABELS = {
+    recipient_weight_kg:"recipient_weight_kg",donor_weight_kg:"donor_weight_kg",
+    recipient_height_cm:"recipient_height_cm",donor_height_cm:"donor_height_cm",
+    donor_egfr:"donor_egfr_ml_min",recipient_pra_percent:"recipient_pra_percent",
+  };
   const keys = Object.keys(pairs[0]).filter(k=>!["id","user_id"].includes(k));
+  const labeledKeys = keys.map(k=>UNIT_LABELS[k]||k);
   const rows = pairs.map(p=>keys.map(k=>{const v=p[k];return typeof v==="string"&&v.includes(",")?`"${v}"`:(v??'');}).join(","));
-  const blob = new Blob([[keys.join(","),...rows].join("\n")],{type:"text/csv"});
+  const blob = new Blob([[labeledKeys.join(","),...rows].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_export.csv"; a.click();
 }
 
@@ -287,12 +293,16 @@ function exportMatches(pairs) {
         donor_blood:   donor.donor_blood_type,
         recipient_blood: recipient.recipient_blood_type,
         donor_priority: donor.donor_priority || "",
+        donor_weight: donor.donor_weight_kg||"",
+        recipient_weight: recipient.recipient_weight_kg||"",
+        donor_height: donor.donor_height_cm||"",
+        recipient_height: recipient.recipient_height_cm||"",
       });
     });
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
-  const header = "Donor,Recipient,Pair Score,Donor Blood,Recipient Blood,Donor Priority";
-  const lines  = rows.map(r=>`${r.donor},${r.recipient},${r.pair_score},${r.donor_blood},${r.recipient_blood},${r.donor_priority}`);
+  const header = "Donor,Recipient,Pair Score,Donor Blood Type,Recipient Blood Type,Donor Priority,Donor Weight (kg),Recipient Weight (kg),Donor Height (cm),Recipient Height (cm)";
+  const lines  = rows.map(r=>`${r.donor},${r.recipient},${r.pair_score},${r.donor_blood},${r.recipient_blood},${r.donor_priority},${r.donor_weight||""},${r.recipient_weight||""},${r.donor_height||""},${r.recipient_height||""}`);
   const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
@@ -516,8 +526,8 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
       </div>
 
       {missingRequired.length > 0 && (
-        <div style={{padding:"10px 14px",borderRadius:8,background:"#1a2a1a",border:"1px solid #1a3028",color:"#ffd166",fontSize:12,marginBottom:16}}>
-          ⚠ Recommended fields not mapped: {missingRequired.map(f=>f.label).join(", ")} — you can still import, unmapped fields will be blank.
+        <div style={{padding:"10px 14px",borderRadius:8,background:"#1a2010",border:"1px solid #2a3010",color:"#ffd166",fontSize:12,marginBottom:16}}>
+          ⚠ Heads up: {missingRequired.map(f=>f.label).join(", ")} not mapped — you can still import, those fields will be blank.
         </div>
       )}
 
@@ -869,6 +879,32 @@ export default function App() {
     setUploading(false);
   }
 
+  // ── Shared import row cleaner — applies to ALL import paths (CSV + xlsx) ──
+  function cleanImportRow(obj) {
+    // Strip unit characters from numeric fields (e.g. "1.9m", "75kg", "180cm")
+    ["recipient_height_cm","donor_height_cm","recipient_weight_kg","donor_weight_kg",
+     "donor_egfr","recipient_pra_percent","recipient_prior_transplants"].forEach(k=>{
+      if(obj[k]&&typeof obj[k]==="string") obj[k]=obj[k].replace(/[^\d.]/g,"").trim()||null;
+    });
+    NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
+    // Auto-convert height meters→cm (Epic exports in meters)
+    if(obj.recipient_height_cm&&parseFloat(obj.recipient_height_cm)<3) obj.recipient_height_cm=Math.round(parseFloat(obj.recipient_height_cm)*100);
+    if(obj.donor_height_cm&&parseFloat(obj.donor_height_cm)<3) obj.donor_height_cm=Math.round(parseFloat(obj.donor_height_cm)*100);
+    // Validate blood types
+    if(!["A","B","AB","O"].includes(obj.donor_blood_type)) obj.donor_blood_type=null;
+    if(!["A","B","AB","O"].includes(obj.recipient_blood_type)) obj.recipient_blood_type=null;
+    // Validate CMV
+    if(!["Positive","Negative","Unknown"].includes(obj.donor_cmv)) obj.donor_cmv="Unknown";
+    if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv)) obj.recipient_cmv="Unknown";
+    // Parse year from full DOB dates
+    if(obj.recipient_year_born?.includes("/")) { const p=obj.recipient_year_born.split("/"); obj.recipient_year_born=p[2]?.length===4?p[2]:`20${p[2]}`; }
+    if(obj.donor_year_born?.includes("/")) { const p=obj.donor_year_born.split("/"); obj.donor_year_born=p[2]?.length===4?p[2]:`20${p[2]}`; }
+    // Parse year from YYYY-MM-DD format
+    if(obj.recipient_year_born?.includes("-")) obj.recipient_year_born=obj.recipient_year_born.split("-")[0];
+    if(obj.donor_year_born?.includes("-")) obj.donor_year_born=obj.donor_year_born.split("-")[0];
+    return obj;
+  }
+
   async function handleMappingConfirm(mapping, sheetContext=null){
     setUploading(true);
 
@@ -890,14 +926,7 @@ export default function App() {
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
         });
-        if(obj.recipient_year_born?.includes("/")){const p=obj.recipient_year_born.split("/");obj.recipient_year_born=p[2]?.length===4?p[2]:`20${p[2]}`;}
-        if(obj.donor_year_born?.includes("/")){const p=obj.donor_year_born.split("/");obj.donor_year_born=p[2]?.length===4?p[2]:`20${p[2]}`;}
-        NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
-        if(!["A","B","AB","O"].includes(obj.donor_blood_type))obj.donor_blood_type=null;
-        if(!["A","B","AB","O"].includes(obj.recipient_blood_type))obj.recipient_blood_type=null;
-        if(!["Positive","Negative","Unknown"].includes(obj.donor_cmv))obj.donor_cmv="Unknown";
-        if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv))obj.recipient_cmv="Unknown";
-        return obj;
+        return cleanImportRow(obj);
       });
     }
 
