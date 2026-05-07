@@ -341,28 +341,47 @@ const PAIRPATH_FIELDS = [
   {key:"centre",label:"Centre",required:false,types:["paired","altruistic","recipient_only"]},
 ];
 
-function autoDetect(headers) {
+function autoDetect(headers, pairType="paired") {
   const mapping = {};
+  const isDonorOnly = pairType === "altruistic";
+  const isRecipOnly = pairType === "recipient_only";
+
   const rules = [
-    {keys:["recipient_name","patient_name","pt_name","name"],field:"recipient_name"},
-    {keys:["recipient_blood_type","recipient_abo","abo","blood_type","blood type","abo type"],field:"recipient_blood_type"},
-    {keys:["recipient_pra","pra","pra_percent","pra %"],field:"recipient_pra_percent"},
-    {keys:["recipient_weight","weight_kg","weight"],field:"recipient_weight_kg"},
-    {keys:["recipient_height","height_cm","height"],field:"recipient_height_cm"},
-    {keys:["recipient_dob","dob","date_of_birth","birth_date"],field:"recipient_year_born"},
-    {keys:["recipient_cmv","cmv"],field:"recipient_cmv"},
-    {keys:["recipient_hla","hla","hla_notes"],field:"recipient_hla_notes"},
-    {keys:["dialysis_start","dialysis start","start_date"],field:"recipient_dialysis_start"},
-    {keys:["donor_name","living_donor","donor"],field:"donor_name"},
-    {keys:["donor_blood_type","donor_abo"],field:"donor_blood_type"},
-    {keys:["donor_egfr","egfr","gfr"],field:"donor_egfr"},
-    {keys:["donor_weight"],field:"donor_weight_kg"},
-    {keys:["donor_height"],field:"donor_height_cm"},
-    {keys:["donor_cmv"],field:"donor_cmv"},
+    // Recipient fields — skip if altruistic-only upload
+    ...(!isDonorOnly?[
+      {keys:["recipient_name","patient_name","pt_name"],field:"recipient_name"},
+      {keys:["recipient_blood_type","recipient_abo"],field:"recipient_blood_type"},
+      {keys:["recipient_pra","pra","pra_percent","pra %"],field:"recipient_pra_percent"},
+      {keys:["recipient_weight","weight_kg"],field:"recipient_weight_kg"},
+      {keys:["recipient_height","height_cm"],field:"recipient_height_cm"},
+      {keys:["recipient_dob","dob","date_of_birth","birth_date"],field:"recipient_year_born"},
+      {keys:["recipient_cmv"],field:"recipient_cmv"},
+      {keys:["recipient_hla","hla_notes"],field:"recipient_hla_notes"},
+      {keys:["dialysis_start","dialysis start","unos","listing_date","waitlist_date"],field:"recipient_dialysis_start"},
+    ]:[]),
+    // Donor fields — skip if recipient-only upload
+    ...(!isRecipOnly?[
+      {keys:["donor_name","living_donor"],field:"donor_name"},
+      {keys:["donor_blood_type","donor_abo"],field:"donor_blood_type"},
+      {keys:["donor_egfr","egfr","gfr"],field:"donor_egfr"},
+      {keys:["donor_weight"],field:"donor_weight_kg"},
+      {keys:["donor_height"],field:"donor_height_cm"},
+      {keys:["donor_cmv"],field:"donor_cmv"},
+      {keys:["donor_dob"],field:"donor_year_born"},
+    ]:[]),
+    // Generic fields that could be either — map based on pairType
+    {keys:["name","patient name","full name","pt name"],field:isDonorOnly?"donor_name":"recipient_name"},
+    {keys:["abo","blood_type","blood type","abo type","blood group"],field:isDonorOnly?"donor_blood_type":"recipient_blood_type"},
+    {keys:["weight"],field:isDonorOnly?"donor_weight_kg":"recipient_weight_kg"},
+    {keys:["height"],field:isDonorOnly?"donor_height_cm":"recipient_height_cm"},
+    {keys:["cmv"],field:isDonorOnly?"donor_cmv":"recipient_cmv"},
+    {keys:["dob","date of birth","birth date","date_of_birth"],field:isDonorOnly?"donor_year_born":"recipient_year_born"},
+    // Shared fields
     {keys:["urgency","priority"],field:"urgency"},
-    {keys:["notes","comments","clinical_notes"],field:"notes"},
-    {keys:["centre","center","hospital","facility"],field:"centre"},
+    {keys:["notes","clinical_notes","comments"],field:"notes"},
+    {keys:["centre","center","hospital","program"],field:"centre"},
   ];
+    {keys:["donor_cmv"],field:"donor_cmv"},
   headers.forEach(h => {
     const hl = h.toLowerCase().replace(/\s+/g,"_");
     for (const rule of rules) {
@@ -444,11 +463,11 @@ function AuthScreen() {
 
 // ── CSV Field Mapper ───────────────────────────────────────────────────────
 function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMapping, cancelLabel, inline=false }) {
-  const [mapping, setMapping] = useState(() => initialMapping || autoDetect(headers));
+  const [mapping, setMapping] = useState(() => initialMapping || autoDetect(headers, pairType));
   
   // Reset mapping when pairType changes so donor fields don't bleed into recipient-only
   useEffect(()=>{
-    setMapping(initialMapping || autoDetect(headers));
+    setMapping(initialMapping || autoDetect(headers, pairType));
   },[pairType]);
 
   const relevantFields = PAIRPATH_FIELDS.filter(f => f.types.includes(pairType));
@@ -987,7 +1006,7 @@ export default function App() {
       {xlsxSheets.length>0&&(()=>{
         const sheet=xlsxSheets[0];
         const savedForSheet=savedMappings[sheet.fingerprint];
-        const autoMapping=savedForSheet?.mapping||autoDetect(sheet.headers);
+        const autoMapping=savedForSheet?.mapping||autoDetect(sheet.headers, sheet.pairType||"paired");
         const knownMapping=!!savedForSheet;
         return(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:1000,overflowY:"auto",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px"}}>
