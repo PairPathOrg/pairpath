@@ -234,6 +234,7 @@ const PAIR_TYPES = [
 const STATUS_OPTIONS = ["active","matched","surgery_scheduled","completed","withdrawn","on_hold","transferred"];
 const statusLabel = s => s.replace(/_/g," ").replace(/\b\w/g, l => l.toUpperCase());
 const NUMERIC_FIELDS = ["recipient_pra_percent","recipient_weight_kg","recipient_height_cm","donor_weight_kg","donor_height_cm","donor_egfr","recipient_prior_transplants"];
+const DONOR_PRIORITIES = ["Primary","Secondary","Tertiary"];
 
 const emptyForm = {
   pair_type:"paired", recipient_name:"", recipient_blood_type:"A", recipient_pra_percent:"",
@@ -247,6 +248,7 @@ const emptyForm = {
   donor_year_born:"", donor_hla_a1:"", donor_hla_a2:"", donor_hla_b1:"", donor_hla_b2:"",
   donor_hla_dr1:"", donor_hla_dr2:"", donor_hla_notes:"",
   donor_egfr:"", donor_cmv:"Unknown", donor_backup:false, donor_zip:"",
+  donor_priority:"Primary",
   urgency:"Medium", status:"active", notes:"", centre:"",
 };
 
@@ -264,6 +266,35 @@ function exportRegistry(pairs) {
   const rows = pairs.map(p=>keys.map(k=>{const v=p[k];return typeof v==="string"&&v.includes(",")?`"${v}"`:(v??'');}).join(","));
   const blob = new Blob([[keys.join(","),...rows].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_export.csv"; a.click();
+}
+
+function exportMatches(pairs) {
+  // Two-column match export: Donor | Recipient | Pair Score
+  // All ABO-compatible donor-recipient combinations, sorted best score first.
+  // Designed for anonymized data (e.g. donor names already entered as D1, D2 etc.)
+  const donors    = pairs.filter(p=>p.donor_blood_type&&p.status==="active");
+  const recipients= pairs.filter(p=>p.recipient_blood_type&&p.status==="active");
+  const rows = [];
+  donors.forEach(donor=>{
+    recipients.forEach(recipient=>{
+      if(donor.id===recipient.id) return;
+      const result = calculateCompatibility(donor, recipient);
+      if(!result.reasons.abo) return; // ABO incompatible — skip
+      rows.push({
+        donor:    donor.donor_name    || donor.id,
+        recipient:recipient.recipient_name || recipient.id,
+        pair_score: result.score ?? "ABO only",
+        donor_blood:   donor.donor_blood_type,
+        recipient_blood: recipient.recipient_blood_type,
+        donor_priority: donor.donor_priority || "",
+      });
+    });
+  });
+  rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
+  const header = "Donor,Recipient,Pair Score,Donor Blood,Recipient Blood,Donor Priority";
+  const lines  = rows.map(r=>`${r.donor},${r.recipient},${r.pair_score},${r.donor_blood},${r.recipient_blood},${r.donor_priority}`);
+  const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
 
 function parseCSV(text, userId) {
@@ -412,62 +443,68 @@ function AuthScreen() {
 }
 
 // ── CSV Field Mapper ───────────────────────────────────────────────────────
-function CSVMapper({ headers, pairType, onConfirm, onCancel, preview }) {
-  const [mapping, setMapping] = useState(() => autoDetect(headers));
+function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMapping, cancelLabel, inline=false }) {
+  const [mapping, setMapping] = useState(() => initialMapping || autoDetect(headers));
   const relevantFields = PAIRPATH_FIELDS.filter(f => f.types.includes(pairType));
   const requiredFields = relevantFields.filter(f => f.required);
   const missingRequired = requiredFields.filter(f => !Object.values(mapping).includes(f.key));
 
+  const inner = (
+    <div style={inline?{}:{...S.card,maxWidth:700,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
+      {!inline&&<div style={{fontFamily:"'DM Serif Display', serif",fontSize:22,color:"#e8e4dc",marginBottom:4}}>Map Your Columns</div>}
+      {!inline&&<p style={{fontSize:13,color:"#8a9aaa",marginBottom:20}}>Match your spreadsheet columns to PairPath fields. Auto-detected matches are pre-filled.</p>}
+
+      {preview?.length > 0 && (
+        <div style={{marginBottom:20,padding:12,background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
+          <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",marginBottom:8}}>FIRST ROW PREVIEW</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {headers.slice(0,6).map(h=>(
+              <div key={h} style={{fontSize:11,color:"#8a9aaa"}}>
+                <span style={{color:"#6a7a8a"}}>{h}:</span> <span style={{color:"#e8e4dc"}}>{preview[0][h]||"—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
+        {headers.map(h => (
+          <div key={h} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
+            <div style={{flex:1,fontSize:12,color:"#c8d4dc",fontWeight:500}}>{h}</div>
+            <div style={{fontSize:12,color:"#6a7a8a"}}>→</div>
+            <select value={mapping[h]||""} onChange={e=>setMapping(m=>({...m,[h]:e.target.value||undefined}))}
+              style={{...S.select,width:180,fontSize:11,padding:"5px 8px"}}>
+              <option value="">Ignore this column</option>
+              {relevantFields.map(f=>(
+                <option key={f.key} value={f.key}>{f.label}{f.required?" *":""}</option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+
+      {missingRequired.length > 0 && (
+        <div style={{padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:12,marginBottom:16}}>
+          Required fields not mapped: {missingRequired.map(f=>f.label).join(", ")}
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>onConfirm(mapping)} disabled={missingRequired.length>0}
+          style={{...S.btn,background:"#2dd4a0",color:"#0a1a14",opacity:missingRequired.length>0?0.4:1}}>
+          Import with This Mapping
+        </button>
+        <button onClick={onCancel} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>
+          {cancelLabel||"Cancel"}
+        </button>
+      </div>
+    </div>
+  );
+
+  if(inline) return inner;
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-      <div style={{...S.card,maxWidth:700,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
-        <div style={{fontFamily:"'DM Serif Display', serif",fontSize:22,color:"#e8e4dc",marginBottom:4}}>Map Your Columns</div>
-        <p style={{fontSize:13,color:"#8a9aaa",marginBottom:20}}>Match your spreadsheet columns to PairPath fields. Auto-detected matches are pre-filled.</p>
-
-        {/* Preview */}
-        {preview.length > 0 && (
-          <div style={{marginBottom:20,padding:12,background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
-            <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",marginBottom:8}}>FIRST ROW PREVIEW</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              {headers.slice(0,6).map(h=>(
-                <div key={h} style={{fontSize:11,color:"#8a9aaa"}}>
-                  <span style={{color:"#6a7a8a"}}>{h}:</span> <span style={{color:"#e8e4dc"}}>{preview[0][h]||"—"}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
-          {headers.map(h => (
-            <div key={h} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
-              <div style={{flex:1,fontSize:12,color:"#c8d4dc",fontWeight:500}}>{h}</div>
-              <div style={{fontSize:12,color:"#6a7a8a"}}>→</div>
-              <select value={mapping[h]||""} onChange={e=>setMapping(m=>({...m,[h]:e.target.value||undefined}))}
-                style={{...S.select,width:180,fontSize:11,padding:"5px 8px"}}>
-                <option value="">Ignore this column</option>
-                {relevantFields.map(f=>(
-                  <option key={f.key} value={f.key}>{f.label}{f.required?" *":""}</option>
-                ))}
-              </select>
-            </div>
-          ))}
-        </div>
-
-        {missingRequired.length > 0 && (
-          <div style={{padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:12,marginBottom:16}}>
-            Required fields not mapped: {missingRequired.map(f=>f.label).join(", ")}
-          </div>
-        )}
-
-        <div style={{display:"flex",gap:10}}>
-          <button onClick={()=>onConfirm(mapping)} disabled={missingRequired.length>0}
-            style={{...S.btn,background:"#2dd4a0",color:"#0a1a14",opacity:missingRequired.length>0?0.4:1}}>
-            Import with This Mapping
-          </button>
-          <button onClick={onCancel} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Cancel</button>
-        </div>
-      </div>
+      {inner}
     </div>
   );
 }
@@ -501,8 +538,12 @@ export default function App() {
   const [filterBlood,setFilterBlood]=useState("all");
   const [filterCentre,setFilterCentre]=useState("all");
   const [filterPairType,setFilterPairType]=useState("all");
-  const [sortBy,setSortBy]=useState("date");
-  const [sortDir,setSortDir]=useState("desc");
+  const [sortStack,setSortStack]=useState([{key:"date",dir:"desc"}]);
+  const [unitSystem,setUnitSystem]=useState("metric");
+  const [savedMappings,setSavedMappings]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_mappings")||"{}");}catch{return {};}});
+  const [xlsxSheets,setXlsxSheets]=useState([]); // [{name, headers, preview, data, pairType}]
+  const [xlsxResults,setXlsxResults]=useState([]); // [{sheetName, imported, dupes, error}]
+  const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false); // "metric" | "imperial"
   const [editingPair,setEditingPair]=useState(null);
   const [uploading,setUploading]=useState(false);
   const [uploadResult,setUploadResult]=useState(null);
@@ -611,7 +652,7 @@ export default function App() {
   const filteredPairs=visiblePairs.filter(p=>{
     if(filterStatus!=="all"&&p.status!==filterStatus) return false;
     if(filterUrgency!=="all"&&p.urgency!==filterUrgency) return false;
-    if(filterBlood!=="all"&&p.recipient_blood_type!==filterBlood) return false;
+    if(filterBlood!=="all"&&p.recipient_blood_type!==filterBlood&&p.donor_blood_type!==filterBlood) return false;
     if(filterCentre!=="all"&&p.centre!==filterCentre) return false;
     if(filterPairType!=="all"&&p.pair_type!==filterPairType) return false;
     if(search){
@@ -622,19 +663,24 @@ export default function App() {
     }
     return true;
   }).sort((a,b)=>{
-    let va,vb;
-    if(sortBy==="date"){va=new Date(a.created_at);vb=new Date(b.created_at);}
-    else if(sortBy==="urgency"){const u={High:0,Medium:1,Low:2};va=u[a.urgency]??1;vb=u[b.urgency]??1;}
-    else if(sortBy==="lastname"){va=(a.recipient_name||"").split(" ").pop();vb=(b.recipient_name||"").split(" ").pop();}
-    else if(sortBy==="pra"){va=parseFloat(a.recipient_pra_percent||0);vb=parseFloat(b.recipient_pra_percent||0);}
-    else if(sortBy==="dialysis"){va=new Date(a.recipient_dialysis_start||0);vb=new Date(b.recipient_dialysis_start||0);}
-    else if(sortBy==="score"){
-      const donors=activePairs.filter(p=>p.donor_blood_type);
-      va=a.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==a.id).map(d=>calculateCompatibility(d,a).score||0)):0;
-      vb=b.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==b.id).map(d=>calculateCompatibility(d,b).score||0)):0;
+    const donors=activePairs.filter(p=>p.donor_blood_type);
+    const urgencyRank={High:0,Medium:1,Low:2};
+    function getVal(p,key){
+      if(key==="date") return new Date(p.created_at).getTime();
+      if(key==="urgency") return urgencyRank[p.urgency]??1;
+      if(key==="lastname") return (p.recipient_name||p.donor_name||"").split(" ").pop().toLowerCase();
+      if(key==="pra") return parseFloat(p.recipient_pra_percent||0);
+      if(key==="dialysis") return new Date(p.recipient_dialysis_start||0).getTime();
+      if(key==="score") return p.recipient_blood_type?Math.max(0,...donors.filter(d=>d.id!==p.id).map(d=>calculateCompatibility(d,p).score||0)):0;
+      return 0;
     }
-    else{va=a.recipient_name||"";vb=b.recipient_name||"";}
-    return sortDir==="desc"?(va>vb?-1:1):(va>vb?1:-1);
+    for(const {key,dir} of sortStack){
+      const va=getVal(a,key),vb=getVal(b,key);
+      if(va===vb) continue;
+      const cmp=typeof va==="string"?va.localeCompare(vb):(va>vb?1:-1);
+      return dir==="desc"?-cmp:cmp;
+    }
+    return 0;
   });
 
   const chains=computedChains;
@@ -651,15 +697,19 @@ export default function App() {
     chainsLong:chains.filter(c=>c.length>=4).length,
   };
 
-  function isDuplicate(f,excludeId=null){
+  function isDuplicate(f, excludeId=null){
     return pairs.some(p=>{
       if(excludeId&&p.id===excludeId) return false;
       const dName=(p.donor_name||"").trim().toLowerCase();
       const rName=(p.recipient_name||"").trim().toLowerCase();
       const fDName=(f.donor_name||"").trim().toLowerCase();
       const fRName=(f.recipient_name||"").trim().toLowerCase();
+      // Altruistic: duplicate if same donor name
       if(f.pair_type==="altruistic") return dName&&dName===fDName;
+      // Recipient only: duplicate if same recipient name
       if(f.pair_type==="recipient_only") return rName&&rName===fRName;
+      // Paired: duplicate only if BOTH donor AND recipient name match
+      // Same recipient + different donor = allowed (multiple donors per recipient)
       return dName&&rName&&dName===fDName&&rName===fRName;
     });
   }
@@ -730,9 +780,46 @@ export default function App() {
 
   function handleFileSelect(e){
     const file=e.target.files[0];if(!file) return;
-    pendingFile.current=file;
-    setShowUploadTypeSelect(true);
     e.target.value="";
+    if(file.name.endsWith(".xlsx")||file.name.endsWith(".xls")){
+      handleXlsxFile(file);
+    } else {
+      pendingFile.current=file;
+      setShowUploadTypeSelect(true);
+    }
+  }
+
+  async function handleXlsxFile(file){
+    setUploading(true);
+    try{
+      // Dynamically load SheetJS
+      if(!window.XLSX){
+        await new Promise((res,rej)=>{
+          const s=document.createElement("script");
+          s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+          s.onload=res;s.onerror=rej;document.head.appendChild(s);
+        });
+      }
+      const buf=await file.arrayBuffer();
+      const wb=window.XLSX.read(buf,{type:"array"});
+      const sheets=wb.SheetNames.map(name=>{
+        const ws=wb.Sheets[name];
+        const json=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+        if(!json.length) return null;
+        const headers=json[0].map(h=>String(h).trim()).filter(Boolean);
+        if(!headers.length) return null;
+        const dataRows=json.slice(1).filter(r=>r.some(c=>c!==""));
+        const preview=dataRows.slice(0,3).map(row=>{
+          const obj={};headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
+        });
+        const fingerprint=headers.slice().sort().join("|");
+        return {name,headers,preview,dataRows,fingerprint};
+      }).filter(Boolean);
+      if(!sheets.length){setUploadResult({success:false,message:"No data found in workbook."});setUploading(false);return;}
+      setXlsxSheets(sheets);
+      setXlsxResults([]);
+    }catch(err){setUploadResult({success:false,message:"Could not read Excel file: "+err.message});}
+    setUploading(false);
   }
 
   async function processFileWithType(pairType){
@@ -750,20 +837,29 @@ export default function App() {
     setUploading(false);
   }
 
-  async function handleMappingConfirm(mapping){
+  async function handleMappingConfirm(mapping, sheetContext=null){
     setUploading(true);
-    const[headerLine,...rows]=csvMapper.text.trim().split("\n");
-    const headers=headerLine.split(",").map(h=>h.trim());
-    try{
-      const records=rows.filter(r=>r.trim()).map(row=>{
-        const vals=row.split(",").map(v=>v.trim().replace(/^"|"$/g,""));
-        const obj={pair_type:csvMapper.pairType,status:"active",urgency:"Medium",donor_backup:false,user_id:currentUserId};
+
+    // Save mapping keyed by column fingerprint for future reuse
+    if(sheetContext?.fingerprint){
+      const updated={...savedMappings,[sheetContext.fingerprint]:{mapping,pairType:sheetContext.pairType}};
+      setSavedMappings(updated);
+      try{localStorage.setItem("pairpath_mappings",JSON.stringify(updated));}catch{}
+    }
+
+    const source=sheetContext||csvMapper;
+    const pairType=source.pairType;
+
+    function processRows(headers, dataRows){
+      return dataRows.filter(r=>r.some?.(c=>c!=="")).map(row=>{
+        const vals=Array.isArray(row)?row:headers.map(h=>row[h]??"");
+        const obj={pair_type:pairType,status:"active",urgency:"Medium",donor_backup:false,user_id:currentUserId};
         headers.forEach((h,i)=>{
           const field=mapping[h];
-          if(field) obj[field]=vals[i]||"";
+          if(field) obj[field]=String(vals[i]??"").trim();
         });
-        if(obj.recipient_year_born&&obj.recipient_year_born.includes("/")){const p=obj.recipient_year_born.split("/");obj.recipient_year_born=p[2]?.length===4?p[2]:`20${p[2]}`;}
-        if(obj.donor_year_born&&obj.donor_year_born.includes("/")){const p=obj.donor_year_born.split("/");obj.donor_year_born=p[2]?.length===4?p[2]:`20${p[2]}`;}
+        if(obj.recipient_year_born?.includes("/")){const p=obj.recipient_year_born.split("/");obj.recipient_year_born=p[2]?.length===4?p[2]:`20${p[2]}`;}
+        if(obj.donor_year_born?.includes("/")){const p=obj.donor_year_born.split("/");obj.donor_year_born=p[2]?.length===4?p[2]:`20${p[2]}`;}
         NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
         if(!["A","B","AB","O"].includes(obj.donor_blood_type))obj.donor_blood_type=null;
         if(!["A","B","AB","O"].includes(obj.recipient_blood_type))obj.recipient_blood_type=null;
@@ -771,16 +867,57 @@ export default function App() {
         if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv))obj.recipient_cmv="Unknown";
         return obj;
       });
+    }
+
+    try{
+      let headers, dataRows;
+      if(sheetContext){
+        headers=sheetContext.headers;
+        dataRows=sheetContext.dataRows;
+      } else {
+        const[headerLine,...rows]=csvMapper.text.trim().split("\n");
+        headers=headerLine.split(",").map(h=>h.trim());
+        dataRows=rows.filter(r=>r.trim()).map(row=>row.split(",").map(v=>v.trim().replace(/^"|"$/g,"")));
+      }
+
+      const records=processRows(headers,dataRows);
       const dupes=records.filter(r=>isDuplicate(r));
       const clean=records.filter(r=>!isDuplicate(r));
       const{data,error}=await supabase.from("pairs").insert(clean).select();
-      if(error)setUploadResult({success:false,message:error.message});
-      else{
-        addAudit("BULK IMPORT",`Imported ${data.length} entries via CSV`);
-        setUploadResult({success:true,message:`${data.length} entries imported.${dupes.length>0?` ${dupes.length} duplicate(s) skipped: ${dupes.map(d=>d.recipient_name||d.donor_name).join(", ")}.`:""}`});
+
+      if(sheetContext){
+        // Sheet queue mode — record result and advance to next sheet
+        const result={sheetName:sheetContext.name,imported:data?.length??0,dupes:dupes.length,error:error?.message||null};
+        setXlsxResults(prev=>{
+          const updated=[...prev,result];
+          return updated;
+        });
+        addAudit("BULK IMPORT",`Sheet "${sheetContext.name}": imported ${data?.length??0} entries`);
+        // Advance queue — remove first sheet
+        setXlsxSheets(prev=>{
+          const remaining=prev.slice(1);
+          if(!remaining.length) setXlsxSummaryVisible(true);
+          return remaining;
+        });
+      } else {
+        // CSV mode
+        if(error)setUploadResult({success:false,message:error.message});
+        else{
+          addAudit("BULK IMPORT",`Imported ${data.length} entries via CSV`);
+          setUploadResult({success:true,message:`${data.length} entries imported.${dupes.length>0?` ${dupes.length} duplicate(s) skipped.`:""}`});
+        }
+        setCsvMapper(null);
       }
-    }catch(err){setUploadResult({success:false,message:"Import error — "+err.message});}
-    setCsvMapper(null);setUploading(false);
+    }catch(err){
+      if(sheetContext){
+        setXlsxResults(prev=>[...prev,{sheetName:sheetContext.name,imported:0,dupes:0,error:err.message}]);
+        setXlsxSheets(prev=>{const remaining=prev.slice(1);if(!remaining.length)setXlsxSummaryVisible(true);return remaining;});
+      } else {
+        setUploadResult({success:false,message:"Import error — "+err.message});
+        setCsvMapper(null);
+      }
+    }
+    setUploading(false);
   }
 
   const pairTypeLabel=t=>PAIR_TYPES.find(p=>p.value===t)?.label||"Pair";
@@ -832,6 +969,97 @@ export default function App() {
         </div>
       )}
       {csvMapper&&<CSVMapper headers={csvMapper.headers} pairType={csvMapper.pairType} preview={csvMapper.preview} onConfirm={handleMappingConfirm} onCancel={()=>setCsvMapper(null)}/>}
+
+      {/* XLSX sheet-by-sheet mapper */}
+      {xlsxSheets.length>0&&(()=>{
+        const sheet=xlsxSheets[0];
+        const savedForSheet=savedMappings[sheet.fingerprint];
+        const autoMapping=savedForSheet?.mapping||autoDetect(sheet.headers);
+        const knownMapping=!!savedForSheet;
+        return(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:1000,overflowY:"auto",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px"}}>
+            <div style={{...S.card,maxWidth:700,width:"100%"}}>
+              {/* Sheet progress indicator */}
+              <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+                {[...xlsxResults,...xlsxSheets].map((s,i)=>{
+                  const done=i<xlsxResults.length;
+                  const current=i===xlsxResults.length;
+                  return(
+                    <div key={i} style={{padding:"3px 10px",borderRadius:4,fontSize:11,fontFamily:"'DM Mono', monospace",
+                      background:done?"#0d2a1e":current?"#1a2e3a":"#0d1219",
+                      color:done?"#2dd4a0":current?"#6ab4d0":"#3a4a5a",
+                      border:`1px solid ${done?"#1a3028":current?"#1a3a5a":"#1a2530"}`}}>
+                      {done?"✓ ":""}{"name" in s?s.name:`Sheet ${i+1}`}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{fontFamily:"'DM Serif Display', serif",fontSize:20,color:"#e8e4dc",marginBottom:4}}>
+                Map columns — <span style={{color:"#6ab4d0"}}>{sheet.name}</span>
+              </div>
+              <div style={{fontSize:12,color:"#8a9aaa",marginBottom:16}}>
+                {xlsxResults.length+1} of {xlsxResults.length+xlsxSheets.length} sheets
+                {knownMapping&&<span style={{color:"#2dd4a0",marginLeft:8}}>✓ Saved mapping recognised — review and confirm</span>}
+              </div>
+
+              {/* Pair type selector for this sheet */}
+              <div style={{marginBottom:16}}>
+                <label style={S.label}>WHAT TYPE OF ENTRIES IS THIS SHEET?</label>
+                <div style={{display:"flex",gap:8,marginTop:4}}>
+                  {PAIR_TYPES.map(pt=>(
+                    <button key={pt.value}
+                      onClick={()=>setXlsxSheets(prev=>{const n=[...prev];n[0]={...n[0],pairType:pt.value};return n;})}
+                      style={{flex:1,padding:"7px 0",borderRadius:7,border:`1.5px solid ${(sheet.pairType||"paired")===pt.value?"#6ab4d0":"#1a2530"}`,
+                        background:(sheet.pairType||"paired")===pt.value?"#0d2030":"#0d1219",
+                        color:(sheet.pairType||"paired")===pt.value?"#6ab4d0":"#6a7a8a",cursor:"pointer",fontSize:11}}>
+                      {pt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <CSVMapper
+                headers={sheet.headers}
+                pairType={sheet.pairType||"paired"}
+                preview={sheet.preview}
+                initialMapping={autoMapping}
+                onConfirm={mapping=>handleMappingConfirm(mapping,{...sheet,pairType:sheet.pairType||"paired"})}
+                onCancel={()=>{
+                  // Skip this sheet, move to next
+                  setXlsxResults(prev=>[...prev,{sheetName:sheet.name,imported:0,dupes:0,error:"Skipped"}]);
+                  setXlsxSheets(prev=>{const r=prev.slice(1);if(!r.length)setXlsxSummaryVisible(true);return r;});
+                }}
+                cancelLabel="Skip Sheet"
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* XLSX import summary */}
+      {xlsxSummaryVisible&&xlsxResults.length>0&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{...S.card,maxWidth:500,width:"90%"}}>
+            <div style={{fontFamily:"'DM Serif Display', serif",fontSize:22,color:"#e8e4dc",marginBottom:4}}>Import Complete</div>
+            <div style={{fontSize:12,color:"#8a9aaa",marginBottom:16}}>{xlsxResults.length} sheet{xlsxResults.length!==1?"s":""} processed</div>
+            {xlsxResults.map((r,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #141c24",fontSize:13}}>
+                <span style={{color:"#c8d4dc",fontWeight:500}}>{r.sheetName}</span>
+                <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                  {r.error&&r.error!=="Skipped"&&<span style={{color:"#ff8a8a",fontSize:11}}>{r.error}</span>}
+                  {r.error==="Skipped"&&<span style={{color:"#6a7a8a",fontSize:11}}>Skipped</span>}
+                  {!r.error&&<span style={{color:"#2dd4a0",fontSize:12}}>{r.imported} imported</span>}
+                  {r.dupes>0&&<span style={{color:"#ffd166",fontSize:11}}>{r.dupes} dupes skipped</span>}
+                </div>
+              </div>
+            ))}
+            <div style={{marginTop:16,display:"flex",justifyContent:"flex-end"}}>
+              <button onClick={()=>{setXlsxSummaryVisible(false);setXlsxResults([]);}} style={{...S.btn,background:"#2dd4a0",color:"#0a1a14"}}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Duplicate Warning Modal */}
       {duplicateWarning&&(
@@ -976,6 +1204,7 @@ export default function App() {
                         <div style={{fontSize:12,fontWeight:600,color:"#e8e4dc"}}>{(p.donor_name||"Altruistic").split(" ")[0]}</div>
                         <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#3d8c6e",marginTop:2}}>{p.donor_blood_type}</div>
                         {p.pair_type==="altruistic"&&<div style={{fontSize:9,color:"#ffd166",marginTop:1}}>ALT</div>}
+                        {p.donor_priority&&p.pair_type==="paired"&&<div style={{fontSize:9,color:{Primary:"#2dd4a0",Secondary:"#6ab4d0",Tertiary:"#ffd166"}[p.donor_priority]||"#6a7a8a",marginTop:1}}>{p.donor_priority.slice(0,3).toUpperCase()}</div>}
                       </th>
                     ))}
                   </tr>
@@ -1038,10 +1267,11 @@ export default function App() {
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={downloadTemplate} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Download Template</button>
               <label style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa",cursor:"pointer",display:"inline-flex",alignItems:"center"}}>
-                {uploading?"Uploading…":"Bulk Upload CSV"}
-                <input ref={fileRef} type="file" accept=".csv" onChange={handleFileSelect} style={{display:"none"}}/>
+                {uploading?"Uploading…":"Bulk Upload CSV / Excel"}
+                <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
               </label>
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0"}}>Export CSV</button>
+              <button onClick={()=>exportMatches(visiblePairs)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}} title="Export all compatible donor-recipient matches as a clean two-column list — ideal for anonymized data">Export Matches</button>
             </div>
           </div>
 
@@ -1077,17 +1307,45 @@ export default function App() {
                 {centres.map(c=><option key={c}>{c}</option>)}
               </select>
             )}
-            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...S.select,width:200}}>
-              <option value="date">Sort: Date Added</option>
-              <option value="lastname">Sort: Last Name</option>
-              <option value="urgency">Sort: Urgency</option>
-              <option value="pra">Sort: PRA % (High First)</option>
-              <option value="dialysis">Sort: Dialysis Date</option>
-              <option value="score">Sort: Best Match Score ↓</option>
-            </select>
-            <button onClick={()=>setSortDir(d=>d==="desc"?"asc":"desc")} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa",padding:"9px 12px"}}>
-              {sortDir==="desc"?"↓":"↑"}
-            </button>
+          </div>
+
+          {/* Multi-key sort stack */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:11,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginRight:4}}>SORT BY</span>
+            {sortStack.map((s,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",background:"#0d1219",border:"1px solid #1a2530",borderRadius:6}}>
+                {i>0&&<span style={{fontSize:10,color:"#3a4a5a",marginRight:4}}>then</span>}
+                <select value={s.key} onChange={e=>{const ns=[...sortStack];ns[i]={...ns[i],key:e.target.value};setSortStack(ns);}}
+                  style={{...S.select,width:170,fontSize:11,padding:"3px 6px",border:"none",background:"transparent"}}>
+                  <option value="date">Date Added</option>
+                  <option value="score">Best Match Score</option>
+                  <option value="dialysis">Time on Dialysis</option>
+                  <option value="pra">PRA % (sensitization)</option>
+                  <option value="urgency">Urgency</option>
+                  <option value="lastname">Last Name</option>
+                </select>
+                <button onClick={()=>{const ns=[...sortStack];ns[i]={...ns[i],dir:ns[i].dir==="desc"?"asc":"desc"};setSortStack(ns);}}
+                  style={{background:"none",border:"none",color:"#6ab4d0",cursor:"pointer",fontSize:13,padding:"0 2px"}}>
+                  {s.dir==="desc"?"↓":"↑"}
+                </button>
+                {sortStack.length>1&&(
+                  <button onClick={()=>setSortStack(st=>st.filter((_,j)=>j!==i))}
+                    style={{background:"none",border:"none",color:"#5a3a3a",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}}>×</button>
+                )}
+              </div>
+            ))}
+            {sortStack.length<4&&(
+              <button onClick={()=>setSortStack(st=>[...st,{key:"pra",dir:"desc"}])}
+                style={{...S.btn,background:"transparent",border:"1px dashed #1e2a34",color:"#6a7a8a",padding:"4px 10px",fontSize:11}}>
+                + Add level
+              </button>
+            )}
+            {sortStack.length>1&&(
+              <button onClick={()=>setSortStack([{key:"date",dir:"desc"}])}
+                style={{background:"none",border:"none",color:"#5a3a3a",cursor:"pointer",fontSize:11,marginLeft:4}}>
+                reset
+              </button>
+            )}
           </div>
 
           {/* Select all bar */}
@@ -1113,9 +1371,23 @@ export default function App() {
               const bs=best?scoreStyle(best.result.score,best.result.aboOnly):null;
               const dAge=calcAge(pair.donor_year_born),rAge=calcAge(pair.recipient_year_born);
               const isSelected=selectedIds.has(pair.id);
+
+              // Sibling donors — other entries with same recipient name
+              const siblingDonors=pair.recipient_name?filteredPairs.filter(p=>
+                p.id!==pair.id&&
+                p.recipient_name&&
+                p.recipient_name.trim().toLowerCase()===pair.recipient_name.trim().toLowerCase()&&
+                p.donor_name
+              ).sort((a,b)=>{
+                const rank={Primary:0,Secondary:1,Tertiary:2};
+                return (rank[a.donor_priority]??1)-(rank[b.donor_priority]??1);
+              }):[];
+              const priorityColor={Primary:"#2dd4a0",Secondary:"#6ab4d0",Tertiary:"#ffd166"};
+
               return (
                 <div key={pair.id} style={{...S.card,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",borderColor:isSelected?"#2dd4a066":"#1a2530",background:isSelected?"#0d1a14":"#0d1219"}}>
-                  <input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(pair.id)} style={{cursor:"pointer",width:16,height:16,flexShrink:0}}/>
+                  {canEdit&&<input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(pair.id)} style={{cursor:"pointer",width:16,height:16,flexShrink:0}}/>}
+                  {!canEdit&&<div style={{width:16,height:16,flexShrink:0}}/>}
                   <div style={{width:6,height:44,borderRadius:3,background:URGENCY_COLORS[pair.urgency]||"#3a4a5a",flexShrink:0}} title={pair.urgency}/>
                   <span style={S.tag("#4a5a6a")}>{pairTypeLabel(pair.pair_type)}</span>
                   <div style={{flex:1,minWidth:180}}>
@@ -1135,11 +1407,32 @@ export default function App() {
                       </>
                     )}
                     {pair.donor_name&&(
-                      <div style={{fontSize:12,color:"#6a7a8a",marginTop:pair.recipient_name?4:0}}>
+                      <div style={{fontSize:12,color:"#6a7a8a",marginTop:pair.recipient_name?4:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        {pair.donor_priority&&pair.pair_type==="paired"&&(
+                          <span style={{...S.tag(priorityColor[pair.donor_priority]||"#6a7a8a"),fontSize:9}}>{pair.donor_priority}</span>
+                        )}
                         Donor: <strong style={{color:"#c8d4dc"}}>{pair.donor_name}</strong>
                         {pair.donor_blood_type?` · ${pair.donor_blood_type}`:""}
                         {dAge?` · Age ${dAge}`:""}
                         {pair.donor_egfr?` · eGFR ${pair.donor_egfr}`:""}
+                      </div>
+                    )}
+                    {/* Sibling donors for same recipient */}
+                    {siblingDonors.length>0&&(
+                      <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #141c24"}}>
+                        <div style={{fontSize:10,color:"#3a4a5a",fontFamily:"'DM Mono', monospace",marginBottom:4}}>ALSO WILLING TO DONATE</div>
+                        {siblingDonors.map(sd=>{
+                          const sdResult=sd.donor_blood_type&&pair.recipient_blood_type?calculateCompatibility(sd,pair):null;
+                          const sdStyle=sdResult?scoreStyle(sdResult.score,sdResult.aboOnly):null;
+                          return(
+                            <div key={sd.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,fontSize:11}}>
+                              <span style={{...S.tag(priorityColor[sd.donor_priority]||"#6a7a8a"),fontSize:9}}>{sd.donor_priority||"—"}</span>
+                              <span style={{color:"#c8d4dc"}}>{sd.donor_name}</span>
+                              <span style={{color:"#6a7a8a"}}>{sd.donor_blood_type||""}</span>
+                              {sdStyle&&<span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:sdStyle.text,background:sdStyle.bg,padding:"1px 6px",borderRadius:4}}>{sdResult.score??"ABO ✓"}</span>}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     {(appMode==="national"||pair.centre)&&pair.centre&&(
@@ -1157,9 +1450,10 @@ export default function App() {
                       </button>
                     )}
                     <select value={pair.status} onChange={e=>handleStatusChange(pair.id,e.target.value)} disabled={!canEdit}
-                      style={{...S.select,width:170,fontSize:12,opacity:canEdit?1:0.4}}>
+                      style={{...S.select,width:170,fontSize:12,opacity:canEdit?1:0.4,cursor:canEdit?"pointer":"not-allowed"}}>
                       {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
                     </select>
+                    {!canEdit&&appMode==="national"&&<span style={{fontSize:10,color:"#3a4a5a",fontFamily:"'DM Mono', monospace"}}>READ ONLY</span>}
                     {canEdit&&(
                       <>
                         <button onClick={()=>startEdit(pair)} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa",padding:"6px 12px"}}>Edit</button>
@@ -1328,10 +1622,75 @@ export default function App() {
       )}
 
       {/* Add / Edit */}
-      {view==="add"&&(
+      {view==="add"&&(()=>{
+        // Unit conversion helpers
+        const toKg  = v => unitSystem==="imperial" ? Math.round(parseFloat(v)*0.453592*10)/10 : parseFloat(v);
+        const toCm  = v => unitSystem==="imperial" ? Math.round(parseFloat(v)*2.54*10)/10      : parseFloat(v);
+        const fromKg= v => unitSystem==="imperial" ? Math.round(parseFloat(v)/0.453592*10)/10  : parseFloat(v);
+        const fromCm= v => unitSystem==="imperial" ? Math.round(parseFloat(v)/2.54*10)/10      : parseFloat(v);
+
+        // Display values (converted from stored kg/cm)
+        const displayWeight = field => form[field] ? fromKg(form[field]) : "";
+        const displayHeight = field => form[field] ? fromCm(form[field]) : "";
+
+        // Store always in metric
+        const setWeight = (field, v) => setForm(f=>({...f,[field]: v===''?'': toKg(v)}));
+        const setHeight = (field, v) => setForm(f=>({...f,[field]: v===''?'': toCm(v)}));
+
+        // Validation ranges (always in kg/cm stored values)
+        const weightWarn = kg => {
+          if(!kg) return null;
+          if(kg < 30)  return "⚠ Weight seems low — verify value";
+          if(kg > 200) return "⚠ Weight seems high — verify value";
+          return null;
+        };
+        const heightWarn = cm => {
+          if(!cm) return null;
+          if(cm < 120) return "⚠ Height seems low — verify value";
+          if(cm > 220) return "⚠ Height seems high — verify value";
+          return null;
+        };
+        const praWarn = v => {
+          if(v===''||v===undefined||v===null) return null;
+          const n=parseFloat(v);
+          if(n<0||n>100) return "⚠ PRA must be 0–100%";
+          return null;
+        };
+        const egfrWarn = v => {
+          if(!v) return null;
+          const n=parseFloat(v);
+          if(n<5)  return "⚠ eGFR seems very low — verify";
+          if(n>150) return "⚠ eGFR seems high — verify";
+          return null;
+        };
+        const yearWarn = v => {
+          if(!v) return null;
+          const n=parseInt(v);
+          const yr=new Date().getFullYear();
+          if(n<1920||n>yr-18) return "⚠ Check year of birth";
+          return null;
+        };
+
+        const wLabel = unitSystem==="imperial"?"lbs":"kg";
+        const hLabel = unitSystem==="imperial"?"inches":"cm";
+
+        return (
         <div style={{...S.page,maxWidth:960}}>
           <h1 style={S.pageTitle}>{editingPair?"Edit Entry":"Register New Entry"}</h1>
-          <p style={S.subtitle}>All entries are made by transplant coordinators on behalf of patients.</p>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <p style={{...S.subtitle,margin:0}}>All entries are made by transplant coordinators on behalf of patients.</p>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#0d1219",borderRadius:8,border:"1px solid #1a2530"}}>
+              <span style={{fontSize:11,color:"#6a7a8a",fontFamily:"'DM Mono', monospace"}}>UNITS</span>
+              {["metric","imperial"].map(u=>(
+                <button key={u} onClick={()=>setUnitSystem(u)}
+                  style={{padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace",
+                    background:unitSystem===u?"#1e3a28":"transparent",color:unitSystem===u?"#2dd4a0":"#6a7a8a"}}>
+                  {u==="metric"?"Metric (kg/cm)":"Imperial (lbs/in)"}
+                </button>
+              ))}
+              {unitSystem==="imperial"&&<span style={{fontSize:10,color:"#ffd166",marginLeft:4}}>values stored as kg/cm</span>}
+            </div>
+          </div>
 
           {!editingPair&&(
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:24}}>
@@ -1360,12 +1719,24 @@ export default function App() {
                         {["A","B","AB","O"].map(o=><option key={o}>{o}</option>)}
                       </select>
                     </div>
-                    <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form.recipient_year_born} onChange={v=>setForm(f=>({...f,recipient_year_born:v}))}/>
+                    <div>
+                      <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form.recipient_year_born} onChange={v=>setForm(f=>({...f,recipient_year_born:v}))}/>
+                      {yearWarn(form.recipient_year_born)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{yearWarn(form.recipient_year_born)}</div>}
+                    </div>
                   </div>
-                  <Field label="PRA %" type="number" placeholder="0–100" value={form.recipient_pra_percent} onChange={v=>setForm(f=>({...f,recipient_pra_percent:v}))}/>
+                  <div>
+                    <Field label="PRA %" type="number" placeholder="0–100" value={form.recipient_pra_percent} onChange={v=>setForm(f=>({...f,recipient_pra_percent:v}))}/>
+                    {praWarn(form.recipient_pra_percent)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{praWarn(form.recipient_pra_percent)}</div>}
+                  </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <Field label="Weight (kg)" type="number" value={form.recipient_weight_kg} onChange={v=>setForm(f=>({...f,recipient_weight_kg:v}))}/>
-                    <Field label="Height (cm)" type="number" value={form.recipient_height_cm} onChange={v=>setForm(f=>({...f,recipient_height_cm:v}))}/>
+                    <div>
+                      <Field label={`Weight (${wLabel})`} type="number" value={displayWeight("recipient_weight_kg")} onChange={v=>setWeight("recipient_weight_kg",v)}/>
+                      {weightWarn(form.recipient_weight_kg)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{weightWarn(form.recipient_weight_kg)}</div>}
+                    </div>
+                    <div>
+                      <Field label={`Height (${hLabel})`} type="number" value={displayHeight("recipient_height_cm")} onChange={v=>setHeight("recipient_height_cm",v)}/>
+                      {heightWarn(form.recipient_height_cm)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{heightWarn(form.recipient_height_cm)}</div>}
+                    </div>
                   </div>
                   <div><label style={S.label}>CMV STATUS</label>
                     <select value={form.recipient_cmv} onChange={e=>setForm(f=>({...f,recipient_cmv:e.target.value}))} style={S.select}>
@@ -1414,12 +1785,24 @@ export default function App() {
                         {["A","B","AB","O"].map(o=><option key={o}>{o}</option>)}
                       </select>
                     </div>
-                    <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form.donor_year_born} onChange={v=>setForm(f=>({...f,donor_year_born:v}))}/>
+                    <div>
+                      <Field label="Year Born *" type="number" placeholder="e.g. 1975" value={form.donor_year_born} onChange={v=>setForm(f=>({...f,donor_year_born:v}))}/>
+                      {yearWarn(form.donor_year_born)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{yearWarn(form.donor_year_born)}</div>}
+                    </div>
                   </div>
-                  <Field label="eGFR (mL/min)" type="number" value={form.donor_egfr} onChange={v=>setForm(f=>({...f,donor_egfr:v}))}/>
+                  <div>
+                    <Field label="eGFR (mL/min)" type="number" value={form.donor_egfr} onChange={v=>setForm(f=>({...f,donor_egfr:v}))}/>
+                    {egfrWarn(form.donor_egfr)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{egfrWarn(form.donor_egfr)}</div>}
+                  </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <Field label="Weight (kg)" type="number" value={form.donor_weight_kg} onChange={v=>setForm(f=>({...f,donor_weight_kg:v}))}/>
-                    <Field label="Height (cm)" type="number" value={form.donor_height_cm} onChange={v=>setForm(f=>({...f,donor_height_cm:v}))}/>
+                    <div>
+                      <Field label={`Weight (${wLabel})`} type="number" value={displayWeight("donor_weight_kg")} onChange={v=>setWeight("donor_weight_kg",v)}/>
+                      {weightWarn(form.donor_weight_kg)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{weightWarn(form.donor_weight_kg)}</div>}
+                    </div>
+                    <div>
+                      <Field label={`Height (${hLabel})`} type="number" value={displayHeight("donor_height_cm")} onChange={v=>setHeight("donor_height_cm",v)}/>
+                      {heightWarn(form.donor_height_cm)&&<div style={{fontSize:11,color:"#ffd166",marginTop:3}}>{heightWarn(form.donor_height_cm)}</div>}
+                    </div>
                   </div>
                   <div><label style={S.label}>CMV STATUS</label>
                     <select value={form.donor_cmv} onChange={e=>setForm(f=>({...f,donor_cmv:e.target.value}))} style={S.select}>
@@ -1448,6 +1831,25 @@ export default function App() {
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <input type="checkbox" id="backup" checked={form.donor_backup||false} onChange={e=>setForm(f=>({...f,donor_backup:e.target.checked}))}/>
                     <label htmlFor="backup" style={{fontSize:12,color:"#8a9aaa",cursor:"pointer"}}>Designated backup donor</label>
+                  </div>
+                  <div>
+                    <label style={S.label}>DONOR PRIORITY</label>
+                    <div style={{display:"flex",gap:8,marginTop:4}}>
+                      {DONOR_PRIORITIES.map(p=>(
+                        <button key={p} onClick={()=>setForm(f=>({...f,donor_priority:p}))}
+                          style={{flex:1,padding:"7px 0",borderRadius:7,border:`1.5px solid ${form.donor_priority===p?"#6ab4d0":"#1a2530"}`,
+                            background:form.donor_priority===p?"#0d2030":"#0d1219",
+                            color:form.donor_priority===p?"#6ab4d0":"#6a7a8a",
+                            cursor:"pointer",fontSize:12,fontFamily:"'DM Mono', monospace",transition:"all 0.15s"}}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{fontSize:11,color:"#3a4a5a",marginTop:5}}>
+                      {form.donor_priority==="Primary"&&"First-choice donor for this recipient — evaluated first in matching"}
+                      {form.donor_priority==="Secondary"&&"Second-choice donor — evaluated if primary doesn't match"}
+                      {form.donor_priority==="Tertiary"&&"Third-choice donor — fallback option if primary and secondary don't match"}
+                    </div>
                   </div>
                   <Field label="ZIP Code" placeholder="e.g. 94109" value={form.donor_zip} onChange={v=>setForm(f=>({...f,donor_zip:v}))}/>
                 </div>
@@ -1488,7 +1890,8 @@ export default function App() {
               style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Cancel</button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Detail */}
       {view==="detail"&&selected&&(()=>{
