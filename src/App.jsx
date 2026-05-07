@@ -586,7 +586,8 @@ export default function App() {
   const [xlsxSheets,setXlsxSheets]=useState([]); // [{name, headers, preview, data, pairType}]
   const [xlsxResults,setXlsxResults]=useState([]); // [{sheetName, imported, dupes, error}]
   const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
-  const [importHeightUnit,setImportHeightUnit]=useState("meters"); // "meters"|"cm"|"auto" // "metric" | "imperial"
+  const [importHeightUnit,setImportHeightUnit]=useState("meters");
+  const [importWeightUnit,setImportWeightUnit]=useState("kg"); // "metric" | "imperial"
   const [editingPair,setEditingPair]=useState(null);
   const [uploading,setUploading]=useState(false);
   const [uploadResult,setUploadResult]=useState(null);
@@ -881,15 +882,14 @@ export default function App() {
   }
 
   // ── Shared import row cleaner — applies to ALL import paths (CSV + xlsx) ──
-  function cleanImportRow(obj, importHeightUnit="auto") {
-    // Strip unit characters from numeric fields (e.g. "1.9m", "75kg", "180cm")
+  function cleanImportRow(obj, importHeightUnit="meters", importWeightUnit="kg") {
+    // Strip unit characters from numeric fields (e.g. "1.9m", "75kg", "180cm", "165lbs")
     ["recipient_height_cm","donor_height_cm","recipient_weight_kg","donor_weight_kg",
      "donor_egfr","recipient_pra_percent","recipient_prior_transplants"].forEach(k=>{
       if(obj[k]&&typeof obj[k]==="string") obj[k]=obj[k].replace(/[^\d.]/g,"").trim()||null;
     });
     NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
-    // Height conversion — Epic exports in meters, PairPath stores cm
-    // "auto" = convert if value < 3 (looks like meters); "meters" = always convert; "cm" = never convert
+    // Height conversion
     ["recipient_height_cm","donor_height_cm"].forEach(k=>{
       if(!obj[k]) return;
       const val=parseFloat(obj[k]);
@@ -897,6 +897,14 @@ export default function App() {
       const shouldConvert = importHeightUnit==="meters" || (importHeightUnit==="auto" && val < 3);
       if(shouldConvert) obj[k]=Math.round(val*100);
       else obj[k]=Math.round(val);
+    });
+    // Weight conversion — lbs to kg if needed
+    ["recipient_weight_kg","donor_weight_kg"].forEach(k=>{
+      if(!obj[k]) return;
+      const val=parseFloat(obj[k]);
+      if(isNaN(val)) return;
+      if(importWeightUnit==="lbs") obj[k]=Math.round(val*0.453592*10)/10;
+      else obj[k]=Math.round(val*10)/10;
     });
     // Validate blood types
     if(!["A","B","AB","O"].includes(obj.donor_blood_type)) obj.donor_blood_type=null;
@@ -934,7 +942,7 @@ export default function App() {
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
         });
-        return cleanImportRow(obj, importHeightUnit);
+        return cleanImportRow(obj, importHeightUnit, importWeightUnit);
       });
     }
 
@@ -1033,10 +1041,10 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {/* Height unit toggle */}
+            {/* Height and weight unit toggles */}
             <div style={{marginBottom:16,padding:"12px 14px",background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
               <div style={{fontSize:11,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:8}}>HEIGHT UNIT IN YOUR FILE</div>
-              <div style={{display:"flex",gap:8}}>
+              <div style={{display:"flex",gap:8,marginBottom:12}}>
                 {[["meters","Meters (Epic default)"],["cm","Centimeters"],["auto","Auto-detect"]].map(([val,label])=>(
                   <button key={val} onClick={()=>setImportHeightUnit(val)}
                     style={{flex:1,padding:"7px 0",borderRadius:6,border:`1.5px solid ${importHeightUnit===val?"#6ab4d0":"#1a2530"}`,
@@ -1047,10 +1055,21 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <div style={{fontSize:11,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:8}}>WEIGHT UNIT IN YOUR FILE</div>
+              <div style={{display:"flex",gap:8}}>
+                {[["kg","Kilograms (Epic default)"],["lbs","Pounds"]].map(([val,label])=>(
+                  <button key={val} onClick={()=>setImportWeightUnit(val)}
+                    style={{flex:1,padding:"7px 0",borderRadius:6,border:`1.5px solid ${importWeightUnit===val?"#6ab4d0":"#1a2530"}`,
+                      background:importWeightUnit===val?"#0d2030":"transparent",
+                      color:importWeightUnit===val?"#6ab4d0":"#6a7a8a",
+                      cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div style={{fontSize:11,color:"#3a4a5a",marginTop:6}}>
-                {importHeightUnit==="meters"&&"Epic exports height in meters — 1.9 becomes 190cm ✓"}
-                {importHeightUnit==="cm"&&"Use if your file already has height in centimeters"}
-                {importHeightUnit==="auto"&&"Converts values under 3 — use if unsure"}
+                {importWeightUnit==="lbs"&&"Pounds will be converted to kg automatically"}
+                {importWeightUnit==="kg"&&"Epic exports weight in kg — no conversion needed"}
               </div>
             </div>
             <button onClick={()=>setShowUploadTypeSelect(false)} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Cancel</button>
@@ -1109,13 +1128,25 @@ export default function App() {
               </div>
 
               <div style={{marginBottom:12,padding:"10px 12px",background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
-                <div style={{fontSize:10,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:6}}>HEIGHT UNIT IN THIS SHEET</div>
-                <div style={{display:"flex",gap:6}}>
+                <div style={{fontSize:10,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:6}}>HEIGHT UNIT</div>
+                <div style={{display:"flex",gap:6,marginBottom:8}}>
                   {[["meters","Meters (Epic)"],["cm","Centimeters"],["auto","Auto"]].map(([val,label])=>(
                     <button key={val} onClick={()=>setImportHeightUnit(val)}
                       style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${importHeightUnit===val?"#6ab4d0":"#1a2530"}`,
                         background:importHeightUnit===val?"#0d2030":"transparent",
                         color:importHeightUnit===val?"#6ab4d0":"#6a7a8a",
+                        cursor:"pointer",fontSize:10,fontFamily:"'DM Mono', monospace"}}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{fontSize:10,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:6}}>WEIGHT UNIT</div>
+                <div style={{display:"flex",gap:6}}>
+                  {[["kg","kg (Epic)"],["lbs","lbs"]].map(([val,label])=>(
+                    <button key={val} onClick={()=>setImportWeightUnit(val)}
+                      style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${importWeightUnit===val?"#6ab4d0":"#1a2530"}`,
+                        background:importWeightUnit===val?"#0d2030":"transparent",
+                        color:importWeightUnit===val?"#6ab4d0":"#6a7a8a",
                         cursor:"pointer",fontSize:10,fontFamily:"'DM Mono', monospace"}}>
                       {label}
                     </button>
@@ -1744,14 +1775,22 @@ export default function App() {
         // Validation ranges (always in kg/cm stored values)
         const weightWarn = kg => {
           if(!kg) return null;
-          if(kg < 30)  return "⚠ Weight seems low — verify value";
-          if(kg > 200) return "⚠ Weight seems high — verify value";
+          const n=parseFloat(kg);
+          if(n < 1.5 && n > 0) return "⚠ Weight looks like it may be in meters — enter in " + wLabel;
+          if(unitSystem==="imperial"&&n<66) return "⚠ Weight seems low — verify in lbs";
+          if(unitSystem==="metric"&&n<30) return "⚠ Weight seems low — verify in kg";
+          if(unitSystem==="imperial"&&n>440) return "⚠ Weight seems high — verify in lbs";
+          if(unitSystem==="metric"&&n>200) return "⚠ Weight seems high — verify in kg";
           return null;
         };
         const heightWarn = cm => {
           if(!cm) return null;
-          if(cm < 120) return "⚠ Height seems low — verify value";
-          if(cm > 220) return "⚠ Height seems high — verify value";
+          const n=parseFloat(cm);
+          if(unitSystem==="metric"&&n<3) return "⚠ Height looks like meters — enter in cm (e.g. 175)";
+          if(unitSystem==="metric"&&n<120) return "⚠ Height seems low — verify in cm";
+          if(unitSystem==="metric"&&n>220) return "⚠ Height seems high — verify in cm";
+          if(unitSystem==="imperial"&&n<48) return "⚠ Height seems low — verify in inches";
+          if(unitSystem==="imperial"&&n>84) return "⚠ Height seems high — verify in inches";
           return null;
         };
         const praWarn = v => {
