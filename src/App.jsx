@@ -445,9 +445,22 @@ function AuthScreen() {
 // ── CSV Field Mapper ───────────────────────────────────────────────────────
 function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMapping, cancelLabel, inline=false }) {
   const [mapping, setMapping] = useState(() => initialMapping || autoDetect(headers));
+  
+  // Reset mapping when pairType changes so donor fields don't bleed into recipient-only
+  useEffect(()=>{
+    setMapping(initialMapping || autoDetect(headers));
+  },[pairType]);
+
   const relevantFields = PAIRPATH_FIELDS.filter(f => f.types.includes(pairType));
   const requiredFields = relevantFields.filter(f => f.required);
+  
+  // Only count a required field as missing if it's relevant to this pair type
   const missingRequired = requiredFields.filter(f => !Object.values(mapping).includes(f.key));
+  
+  // Clean mapping — remove any mapped fields not relevant to current pairType
+  const cleanedMapping = Object.fromEntries(
+    Object.entries(mapping).filter(([,v]) => !v || relevantFields.some(f=>f.key===v))
+  );
 
   const inner = (
     <div style={inline?{}:{...S.card,maxWidth:700,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
@@ -490,7 +503,7 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
       )}
 
       <div style={{display:"flex",gap:10}}>
-        <button onClick={()=>onConfirm(mapping)} disabled={missingRequired.length>0}
+        <button onClick={()=>onConfirm(cleanedMapping)} disabled={missingRequired.length>0}
           style={{...S.btn,background:"#2dd4a0",color:"#0a1a14",opacity:missingRequired.length>0?0.4:1}}>
           Import with This Mapping
         </button>
