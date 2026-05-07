@@ -50,7 +50,7 @@ function calculateCompatibility(donor, recipient) {
   const highPRA = pra > 80;
   const moderatePRA = pra > 50 && pra <= 80;
   const sizeDiff = Math.abs((donor.donor_weight_kg || 70) - (recipient.recipient_weight_kg || 70));
-  const sizeOk = sizeDiff < 40;
+  const sizeOk = sizeDiff < 20;
   const cmvRisk = donor.donor_cmv === "Positive" && recipient.recipient_cmv === "Negative";
   const dAge = calcAge(donor.donor_year_born), rAge = calcAge(recipient.recipient_year_born);
   const ageDiff = dAge && rAge ? Math.abs(dAge - rAge) : 0;
@@ -121,7 +121,7 @@ function findChains(pairs) {
     if (!checkABO(donor.blood, recipient.blood)) return 0;
     const pra = recipient.pra || 0;
     const praPoints = pra > 80 ? 25 : pra > 50 ? 18 : 15;
-    const sizeOk = Math.abs((donor.weight || 70) - (recipient.weight || 70)) < 40;
+    const sizeOk = Math.abs((donor.weight || 70) - (recipient.weight || 70)) < 20;
     const cmvRisk = donor.cmv === "Positive" && recipient.cmv === "Negative";
     return Math.max(0, Math.min(70, praPoints + 45 - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0)));
   }
@@ -275,9 +275,6 @@ function exportRegistry(pairs) {
 }
 
 function exportMatches(pairs) {
-  // Two-column match export: Donor | Recipient | Pair Score
-  // All ABO-compatible donor-recipient combinations, sorted best score first.
-  // Designed for anonymized data (e.g. donor names already entered as D1, D2 etc.)
   const donors    = pairs.filter(p=>p.donor_blood_type&&p.status==="active");
   const recipients= pairs.filter(p=>p.recipient_blood_type&&p.status==="active");
   const rows = [];
@@ -285,24 +282,31 @@ function exportMatches(pairs) {
     recipients.forEach(recipient=>{
       if(donor.id===recipient.id) return;
       const result = calculateCompatibility(donor, recipient);
-      if(!result.reasons.abo) return; // ABO incompatible — skip
+      if(!result.reasons.abo) return;
+      const waitlist = recipient.recipient_dialysis_start
+        ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"})
+        : "";
+      const donorWt  = donor.donor_weight_kg    ? Math.round(parseFloat(donor.donor_weight_kg))    : "";
+      const recipWt  = recipient.recipient_weight_kg ? Math.round(parseFloat(recipient.recipient_weight_kg)) : "";
+      const weightDelta = donorWt && recipWt ? Math.abs(donorWt - recipWt) : "";
       rows.push({
-        donor:    donor.donor_name    || donor.id,
-        recipient:recipient.recipient_name || recipient.id,
-        pair_score: result.score ?? "ABO only",
-        donor_blood:   donor.donor_blood_type,
-        recipient_blood: recipient.recipient_blood_type,
+        donor:          donor.donor_name    || donor.id,
+        donor_blood:    donor.donor_blood_type,
+        recipient:      recipient.recipient_name || recipient.id,
+        recipient_blood:recipient.recipient_blood_type,
+        pra:            recipient.recipient_pra_percent ?? "",
+        waitlist_date:  waitlist,
+        donor_weight:   donorWt,
+        recipient_weight: recipWt,
+        weight_gap_kg:  weightDelta,
+        pair_score:     result.score ?? "ABO only",
         donor_priority: donor.donor_priority || "",
-        donor_weight: donor.donor_weight_kg||"",
-        recipient_weight: recipient.recipient_weight_kg||"",
-        donor_height: donor.donor_height_cm||"",
-        recipient_height: recipient.recipient_height_cm||"",
       });
     });
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
-  const header = "Donor,Recipient,Pair Score,Donor Blood Type,Recipient Blood Type,Donor Priority,Donor Weight (kg),Recipient Weight (kg),Donor Height (cm),Recipient Height (cm)";
-  const lines  = rows.map(r=>`${r.donor},${r.recipient},${r.pair_score},${r.donor_blood},${r.recipient_blood},${r.donor_priority},${r.donor_weight||""},${r.recipient_weight||""},${r.donor_height||""},${r.recipient_height||""}`);
+  const header = "Donor,Donor Blood Type,Recipient,Recipient Blood Type,PRA %,Waitlist Date,Donor Weight (kg),Recipient Weight (kg),Weight Gap (kg),Pair Score,Donor Priority";
+  const lines  = rows.map(r=>[r.donor,r.donor_blood,r.recipient,r.recipient_blood,r.pra,r.waitlist_date,r.donor_weight,r.recipient_weight,r.weight_gap_kg,r.pair_score,r.donor_priority].join(","));
   const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
@@ -883,10 +887,10 @@ export default function App() {
 
   // ── Shared import row cleaner — applies to ALL import paths (CSV + xlsx) ──
   function cleanImportRow(obj, importHeightUnit="meters", importWeightUnit="kg") {
-    // Strip unit characters from numeric fields (e.g. "1.9m", "75kg", "180cm", "165lbs")
+    // Strip unit characters from numeric fields — handles "75kg", "75 kg", "1.9m", "180 cm", "165 lbs"
     ["recipient_height_cm","donor_height_cm","recipient_weight_kg","donor_weight_kg",
      "donor_egfr","recipient_pra_percent","recipient_prior_transplants"].forEach(k=>{
-      if(obj[k]&&typeof obj[k]==="string") obj[k]=obj[k].replace(/[^\d.]/g,"").trim()||null;
+      if(obj[k]!=null) obj[k]=String(obj[k]).replace(/[^\d.]/g,"").trim()||null;
     });
     NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
     // Height conversion
@@ -918,6 +922,20 @@ export default function App() {
     // Parse year from YYYY-MM-DD format
     if(obj.recipient_year_born?.includes("-")) obj.recipient_year_born=obj.recipient_year_born.split("-")[0];
     if(obj.donor_year_born?.includes("-")) obj.donor_year_born=obj.donor_year_born.split("-")[0];
+    // Convert Excel serial date numbers to ISO date string (e.g. 45950 → 2025-10-25)
+    function excelSerialToISO(val){
+      if(!val) return val;
+      const n=parseFloat(String(val).trim());
+      if(!isNaN(n)&&n>40000&&n<60000){
+        // Excel serial: days since 1900-01-01 (with Lotus 1-2-3 leap year bug offset)
+        const date=new Date((n-25569)*86400000);
+        return date.toISOString().split("T")[0];
+      }
+      return val;
+    }
+    obj.recipient_dialysis_start=excelSerialToISO(obj.recipient_dialysis_start);
+    obj.recipient_year_born=obj.recipient_year_born?String(obj.recipient_year_born).split("-")[0].split("/").pop():obj.recipient_year_born;
+    obj.donor_year_born=obj.donor_year_born?String(obj.donor_year_born).split("-")[0].split("/").pop():obj.donor_year_born;
     return obj;
   }
 
@@ -1271,10 +1289,10 @@ export default function App() {
       <header style={S.header}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <span style={{fontFamily:"'DM Serif Display', serif",fontSize:20,color:"#e8e4dc"}}>PairPath</span>
-          <button onClick={()=>setAppMode(m=>m==="solo"?"national":"solo")}
+          {false&&<button onClick={()=>setAppMode(m=>m==="solo"?"national":"solo")}
             style={{...S.tag(appMode==="national"?"#6ab4d0":"#3d8c6e"),cursor:"pointer",border:"none",background:appMode==="national"?"#6ab4d022":"#3d8c6e22"}}>
             {appMode.toUpperCase()}
-          </button>
+          </button>}
           <button onClick={()=>setDemoMode(m=>!m)}
             style={{...S.tag(demoMode?"#ffd166":"#4a5a6a"),cursor:"pointer",border:`1px solid ${demoMode?"#ffd16644":"#2a3a4a"}`,background:demoMode?"#2a1e0022":"transparent",fontSize:10,padding:"2px 8px"}}>
             {demoMode?"● DEMO":"DEMO"}
@@ -1537,7 +1555,7 @@ export default function App() {
                         <div style={{fontSize:12,color:"#8a9aaa"}}>
                           Recipient{rAge?` · Age ${rAge}`:""}
                           {pair.recipient_pra_percent?` · PRA ${pair.recipient_pra_percent}%`:""}
-                          {pair.recipient_dialysis_start?` · Dialysis ${new Date(pair.recipient_dialysis_start).toLocaleDateString("en-US",{month:"short",year:"numeric"})}`:""}
+                          {pair.recipient_dialysis_start?` · Waitlist ${new Date(pair.recipient_dialysis_start).toLocaleDateString("en-US",{month:"short",year:"numeric"})}`:""}
                         </div>
                       </>
                     )}
@@ -1905,7 +1923,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <Field label="Dialysis Start Date" type="date" value={form.recipient_dialysis_start} onChange={v=>setForm(f=>({...f,recipient_dialysis_start:v}))}/>
+                  <Field label="Waitlist Date (UNOS)" type="date" value={form.recipient_dialysis_start} onChange={v=>setForm(f=>({...f,recipient_dialysis_start:v}))}/>
                   <Field label="Prior Transplants" type="number" placeholder="0" value={form.recipient_prior_transplants} onChange={v=>setForm(f=>({...f,recipient_prior_transplants:v}))}/>
                   <Field label="Sensitisation History Notes" placeholder="Prior transplants, pregnancies, transfusions…" value={form.recipient_sensitisation_notes} onChange={v=>setForm(f=>({...f,recipient_sensitisation_notes:v}))}/>
                   <Field label="Crossmatch Virtual" placeholder="Negative / Positive / Pending" value={form.recipient_crossmatch_virtual} onChange={v=>setForm(f=>({...f,recipient_crossmatch_virtual:v}))}/>
@@ -2065,7 +2083,7 @@ export default function App() {
                 {label:"ABO Compatibility",value:result.reasons.abo?"Compatible ✓":"Incompatible ✗",ok:result.reasons.abo,detail:`${donor.donor_blood_type} → ${recipient.recipient_blood_type}`},
                 {label:"HLA Mismatches",value:result.aboOnly?"Not entered":result.reasons.hlaMismatches+" / 6",ok:!result.aboOnly&&result.reasons.hlaMismatches<=2,warn:!result.aboOnly&&result.reasons.hlaMismatches<=4,detail:result.aboOnly?"Enter HLA alleles for a Pair Score":"0 = perfect match · 6 = full mismatch · drives 60% of score"},
                 {label:"PRA Sensitization",value:`${recipient.recipient_pra_percent||"?"}%`,ok:result.reasons.highSensitization,warn:result.reasons.moderatePRA,detail:result.reasons.highSensitization?"Highly sensitized — match earns highest PRA bonus":result.reasons.moderatePRA?"Moderately sensitized — partial bonus if matched":"Low sensitization"},
-                {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:`Donor ${donor.donor_weight_kg||"?"}kg → Recipient ${recipient.recipient_weight_kg||"?"}kg · >40kg gap flagged`},
+                {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:`Donor ${donor.donor_weight_kg||"?"}kg → Recipient ${recipient.recipient_weight_kg||"?"}kg · >20kg gap flagged`},
                 {label:"CMV Risk",value:result.reasons.cmvRisk?"D+/R− Risk":"Acceptable",ok:!result.reasons.cmvRisk,detail:`Donor ${donor.donor_cmv||"?"} / Recipient ${recipient.recipient_cmv||"?"} · D+/R− increases recipient risk`},
                 {label:"Age Gap",value:dAge&&rAge?`${result.reasons.ageDiff} yrs`:"Unknown",ok:!result.reasons.ageFlag,detail:`Donor ${dAge||"?"}y · Recipient ${rAge||"?"}y · >15yr gap flagged`},
                 {label:"Donor eGFR",value:donor.donor_egfr?`${donor.donor_egfr} mL/min`:"Not recorded",ok:(donor.donor_egfr||0)>=60,detail:(donor.donor_egfr||0)>=60?"Adequate renal function":"Below 60 — review required"},
