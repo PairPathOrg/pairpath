@@ -585,7 +585,8 @@ export default function App() {
   const [savedMappings,setSavedMappings]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_mappings")||"{}");}catch{return {};}});
   const [xlsxSheets,setXlsxSheets]=useState([]); // [{name, headers, preview, data, pairType}]
   const [xlsxResults,setXlsxResults]=useState([]); // [{sheetName, imported, dupes, error}]
-  const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false); // "metric" | "imperial"
+  const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
+  const [importHeightUnit,setImportHeightUnit]=useState("meters"); // "meters"|"cm"|"auto" // "metric" | "imperial"
   const [editingPair,setEditingPair]=useState(null);
   const [uploading,setUploading]=useState(false);
   const [uploadResult,setUploadResult]=useState(null);
@@ -880,23 +881,30 @@ export default function App() {
   }
 
   // ── Shared import row cleaner — applies to ALL import paths (CSV + xlsx) ──
-  function cleanImportRow(obj) {
+  function cleanImportRow(obj, importHeightUnit="auto") {
     // Strip unit characters from numeric fields (e.g. "1.9m", "75kg", "180cm")
     ["recipient_height_cm","donor_height_cm","recipient_weight_kg","donor_weight_kg",
      "donor_egfr","recipient_pra_percent","recipient_prior_transplants"].forEach(k=>{
       if(obj[k]&&typeof obj[k]==="string") obj[k]=obj[k].replace(/[^\d.]/g,"").trim()||null;
     });
     NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
-    // Auto-convert height meters→cm (Epic exports in meters)
-    if(obj.recipient_height_cm&&parseFloat(obj.recipient_height_cm)<3) obj.recipient_height_cm=Math.round(parseFloat(obj.recipient_height_cm)*100);
-    if(obj.donor_height_cm&&parseFloat(obj.donor_height_cm)<3) obj.donor_height_cm=Math.round(parseFloat(obj.donor_height_cm)*100);
+    // Height conversion — Epic exports in meters, PairPath stores cm
+    // "auto" = convert if value < 3 (looks like meters); "meters" = always convert; "cm" = never convert
+    ["recipient_height_cm","donor_height_cm"].forEach(k=>{
+      if(!obj[k]) return;
+      const val=parseFloat(obj[k]);
+      if(isNaN(val)) return;
+      const shouldConvert = importHeightUnit==="meters" || (importHeightUnit==="auto" && val < 3);
+      if(shouldConvert) obj[k]=Math.round(val*100);
+      else obj[k]=Math.round(val);
+    });
     // Validate blood types
     if(!["A","B","AB","O"].includes(obj.donor_blood_type)) obj.donor_blood_type=null;
     if(!["A","B","AB","O"].includes(obj.recipient_blood_type)) obj.recipient_blood_type=null;
     // Validate CMV
     if(!["Positive","Negative","Unknown"].includes(obj.donor_cmv)) obj.donor_cmv="Unknown";
     if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv)) obj.recipient_cmv="Unknown";
-    // Parse year from full DOB dates
+    // Parse year from full DOB dates MM/DD/YYYY
     if(obj.recipient_year_born?.includes("/")) { const p=obj.recipient_year_born.split("/"); obj.recipient_year_born=p[2]?.length===4?p[2]:`20${p[2]}`; }
     if(obj.donor_year_born?.includes("/")) { const p=obj.donor_year_born.split("/"); obj.donor_year_born=p[2]?.length===4?p[2]:`20${p[2]}`; }
     // Parse year from YYYY-MM-DD format
@@ -926,7 +934,7 @@ export default function App() {
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
         });
-        return cleanImportRow(obj);
+        return cleanImportRow(obj, importHeightUnit);
       });
     }
 
@@ -1025,6 +1033,26 @@ export default function App() {
                 </button>
               ))}
             </div>
+            {/* Height unit toggle */}
+            <div style={{marginBottom:16,padding:"12px 14px",background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
+              <div style={{fontSize:11,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:8}}>HEIGHT UNIT IN YOUR FILE</div>
+              <div style={{display:"flex",gap:8}}>
+                {[["meters","Meters (Epic default)"],["cm","Centimeters"],["auto","Auto-detect"]].map(([val,label])=>(
+                  <button key={val} onClick={()=>setImportHeightUnit(val)}
+                    style={{flex:1,padding:"7px 0",borderRadius:6,border:`1.5px solid ${importHeightUnit===val?"#6ab4d0":"#1a2530"}`,
+                      background:importHeightUnit===val?"#0d2030":"transparent",
+                      color:importHeightUnit===val?"#6ab4d0":"#6a7a8a",
+                      cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:"#3a4a5a",marginTop:6}}>
+                {importHeightUnit==="meters"&&"Epic exports height in meters — 1.9 becomes 190cm ✓"}
+                {importHeightUnit==="cm"&&"Use if your file already has height in centimeters"}
+                {importHeightUnit==="auto"&&"Converts values under 3 — use if unsure"}
+              </div>
+            </div>
             <button onClick={()=>setShowUploadTypeSelect(false)} style={{...S.btn,background:"transparent",border:"1px solid #1e2a34",color:"#8a9aaa"}}>Cancel</button>
           </div>
         </div>
@@ -1075,6 +1103,21 @@ export default function App() {
                         background:(sheet.pairType||"paired")===pt.value?"#0d2030":"#0d1219",
                         color:(sheet.pairType||"paired")===pt.value?"#6ab4d0":"#6a7a8a",cursor:"pointer",fontSize:11}}>
                       {pt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{marginBottom:12,padding:"10px 12px",background:"#111820",borderRadius:8,border:"1px solid #1e2a34"}}>
+                <div style={{fontSize:10,color:"#6a7a8a",fontFamily:"'DM Mono', monospace",marginBottom:6}}>HEIGHT UNIT IN THIS SHEET</div>
+                <div style={{display:"flex",gap:6}}>
+                  {[["meters","Meters (Epic)"],["cm","Centimeters"],["auto","Auto"]].map(([val,label])=>(
+                    <button key={val} onClick={()=>setImportHeightUnit(val)}
+                      style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${importHeightUnit===val?"#6ab4d0":"#1a2530"}`,
+                        background:importHeightUnit===val?"#0d2030":"transparent",
+                        color:importHeightUnit===val?"#6ab4d0":"#6a7a8a",
+                        cursor:"pointer",fontSize:10,fontFamily:"'DM Mono', monospace"}}>
+                      {label}
                     </button>
                   ))}
                 </div>
