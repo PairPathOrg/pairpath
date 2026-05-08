@@ -404,8 +404,8 @@ function exportMatches(pairs) {
     });
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
-  const header = "Donor,Donor Blood Type,Recipient,Recipient Blood Type,PRA %,Waitlist Date,Donor Weight (kg),Recipient Weight (kg),Weight Gap (kg),Pair Score,Donor Priority";
-  const lines  = rows.map(r=>[r.donor,r.donor_blood,r.recipient,r.recipient_blood,r.pra,r.waitlist_date,r.donor_weight,r.recipient_weight,r.weight_gap_kg,r.pair_score,r.donor_priority].join(","));
+  const header = "Pair Score,Recipient,Recipient Blood Type,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Donor,Donor Blood Type,Donor Weight (kg),Weight Gap (kg)";
+  const lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.waitlist_date,r.recipient_weight,r.donor,r.donor_blood,r.donor_weight,r.weight_gap_kg].join(","));
   const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
