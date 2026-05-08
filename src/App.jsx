@@ -358,6 +358,8 @@ function exportMatchCards(pairs) {
   w.document.close();
   w.print();
 }
+
+function exportRegistry(pairs) {
   if (!pairs.length) return;
   const UNIT_LABELS = {
     recipient_weight_kg:"recipient_weight_kg",donor_weight_kg:"donor_weight_kg",
@@ -2386,4 +2388,4 @@ export default function App() {
       <style>{`select option{background:#1a2535;color:#e8e4dc;}input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.5);}@media print{header,nav{display:none!important;}}`}</style>
     </div>
   );
-} 
+}
