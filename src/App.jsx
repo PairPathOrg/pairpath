@@ -2386,4 +2386,4 @@ export default function App() {
       <style>{`select option{background:#1a2535;color:#e8e4dc;}input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.5);}@media print{header,nav{display:none!important;}}`}</style>
     </div>
   );
-}
+} 
