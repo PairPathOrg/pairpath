@@ -784,10 +784,23 @@ export default function App() {
   const currentUserId=session.user.id;
   const userMeta=session.user.user_metadata||{};
   const isAdmin=userMeta.role==="admin";
-  // Solo mode: own records only. National mode: all records (read), but edit/delete still gated by ownership.
-  // Demo mode overlays fake data so real registry is untouched.
-  const visiblePairs=demoMode?DEMO_PAIRS:(appMode==="national"?pairs:(isAdmin?pairs:pairs.filter(p=>p.user_id===currentUserId)));
-  const activePairs=visiblePairs.filter(p=>p.status==="active");
+  // Extract email domain for centre grouping — @sutterhealth.org groups all Sutter users
+  const userEmail=session.user.email||"";
+  const userDomain=userEmail.includes("@")?userEmail.split("@")[1].toLowerCase():"";
+  // Special domains that shouldn't be used for grouping (personal emails)
+  const PERSONAL_DOMAINS=["gmail.com","yahoo.com","hotmail.com","outlook.com","icloud.com","me.com","aol.com","protonmail.com","mail.com"];
+  const hasCentreDomain=userDomain&&!PERSONAL_DOMAINS.includes(userDomain);
+  // Centre grouping: if user has institutional email, show all data from same domain
+  // If personal email, fall back to own data only
+  const sameDomainPairs=hasCentreDomain
+    ?pairs.filter(p=>{
+        if(!p.user_email) return p.user_id===currentUserId; // legacy entries without email
+        return p.user_email.toLowerCase().endsWith("@"+userDomain);
+      })
+    :pairs.filter(p=>p.user_id===currentUserId);
+  // Demo mode overlays fake data. National shows everything (hidden for now).
+  const visiblePairs=demoMode?DEMO_PAIRS:(appMode==="national"?pairs:(isAdmin?pairs:sameDomainPairs));
+  const activePairs=visiblePairs.filter(p=>p.status==="active"||p.status==="active");
 
   function addAudit(action,detail){
     if(demoMode) return;
@@ -881,7 +894,7 @@ export default function App() {
     if(needsR&&!form.recipient_name) return;
     if(needsD&&!form.donor_name) return;
     setAdding(true);
-    const insertData={...form,status:form.status||"active",user_id:currentUserId,donor_backup:form.donor_backup===true||form.donor_backup==="true"};
+    const insertData={...form,status:form.status||"active",user_id:currentUserId,user_email:userEmail,donor_backup:form.donor_backup===true||form.donor_backup==="true"};
     NUMERIC_FIELDS.forEach(k=>{if(insertData[k]===""||insertData[k]===undefined)insertData[k]=null;});
     if(isDuplicate(form,editingPair||undefined)){
       setPendingInsert(insertData);setDuplicateWarning(form);setAdding(false);return;
@@ -893,7 +906,9 @@ export default function App() {
     if(demoMode) return;
     const pair=pairs.find(p=>p.id===id);
     if(!pair) return;
-    if(!isAdmin&&pair.user_id!==currentUserId){setFlash(null);return;}
+    const pairDomain=pair.user_email?pair.user_email.split("@")[1]?.toLowerCase():"";
+    const canDelete=isAdmin||(hasCentreDomain&&pairDomain===userDomain)||pair.user_id===currentUserId;
+    if(!canDelete) return;
     await supabase.from("pairs").delete().eq("id",id);
     addAudit("DELETE",`Deleted ${pair.recipient_name||pair.donor_name}`);
     setDeleteConfirm(null);
@@ -903,7 +918,12 @@ export default function App() {
     if(demoMode) return;
     const idsToDelete=isAdmin
       ?[...selectedIds]
-      :[...selectedIds].filter(id=>{const p=pairs.find(r=>r.id===id);return p&&p.user_id===currentUserId;});
+      :[...selectedIds].filter(id=>{
+          const p=pairs.find(r=>r.id===id);
+          if(!p) return false;
+          const pairDomain=p.user_email?p.user_email.split("@")[1]?.toLowerCase():"";
+          return (hasCentreDomain&&pairDomain===userDomain)||p.user_id===currentUserId;
+        });
     const names=idsToDelete.map(id=>{const p=pairs.find(r=>r.id===id);return p?.recipient_name||p?.donor_name||id;});
     await Promise.all(idsToDelete.map(id=>supabase.from("pairs").delete().eq("id",id)));
     addAudit("BULK DELETE",`Deleted ${idsToDelete.length} entries: ${names.join(", ")}`);
@@ -1053,7 +1073,7 @@ export default function App() {
     function processRows(headers, dataRows){
       return dataRows.filter(r=>r.some?.(c=>c!=="")).map(row=>{
         const vals=Array.isArray(row)?row:headers.map(h=>row[h]??"");
-        const obj={pair_type:pairType,status:"active",urgency:"Medium",donor_backup:false,user_id:currentUserId};
+        const obj={pair_type:pairType,status:"active",urgency:"Medium",donor_backup:false,user_id:currentUserId,user_email:userEmail};
         headers.forEach((h,i)=>{
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
@@ -1406,6 +1426,8 @@ export default function App() {
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:12,color:"#b0bec5"}}>{userMeta.full_name||session.user.email}</span>
           {isAdmin&&<span style={S.tag("#ffd166")}>Admin</span>}
+          {!isAdmin&&hasCentreDomain&&<span style={{...S.tag("#6ab4d0"),fontSize:10}} title={`Sharing data with all @${userDomain} users`}>@{userDomain}</span>}
+          {!isAdmin&&!hasCentreDomain&&<span style={{...S.tag("#90a4b4"),fontSize:10}}>Personal</span>}
           {isAdmin&&<button onClick={()=>setShowAudit(v=>!v)} style={{...S.btn,padding:"4px 10px",background:showAudit?"#1a2e24":"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:11}}>Audit</button>}
           {userMeta.centre&&<span style={S.tag("#3d5060")}>{userMeta.centre}</span>}
           <div style={{width:7,height:7,borderRadius:"50%",background:"#2dd4a0"}}/>
@@ -1615,7 +1637,8 @@ export default function App() {
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {filteredPairs.length===0&&<div style={{textAlign:"center",padding:40,color:"#5a6a7a",fontSize:13}}>No entries match your filters</div>}
             {filteredPairs.map(pair=>{
-              const canEdit=pair.user_id===currentUserId||isAdmin;
+              const pairDomain=pair.user_email?pair.user_email.split("@")[1]?.toLowerCase():"";
+              const canEdit=isAdmin||(hasCentreDomain&&pairDomain===userDomain)||pair.user_id===currentUserId;
               const donorPairs=activePairs.filter(p=>p.donor_blood_type);
               const matches=pair.recipient_blood_type?donorPairs.filter(d=>d.id!==pair.id).map(d=>({donor:d,result:calculateCompatibility(d,pair)})).filter(m=>m.result.reasons.abo).sort((a,b)=>(b.result.score||0)-(a.result.score||0)):[];
               const best=matches[0]||null;
