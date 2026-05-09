@@ -532,52 +532,220 @@ function Field({ label, value, onChange, type="text", placeholder }) {
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-function AuthScreen() {
-  const [mode,setMode]=useState("login");
-  const [email,setEmail]=useState(""); const [password,setPassword]=useState("");
-  const [name,setName]=useState(""); const [centre,setCentre]=useState("");
-  const [loading,setLoading]=useState(false); const [error,setError]=useState(""); const [success,setSuccess]=useState("");
+function AuthScreen({onDemoMode}) {
+  const [mode,setMode]=useState("login"); // login | signup | reset_sent | locked
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [name,setName]=useState("");
+  const [centre,setCentre]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const [success,setSuccess]=useState("");
+  const [locked,setLocked]=useState(false);
+  const [demoEntry,setDemoEntry]=useState(false);
 
-  async function handleLogin(){setLoading(true);setError("");const{error}=await supabase.auth.signInWithPassword({email,password});if(error)setError(error.message);setLoading(false);}
-  async function handleSignup(){if(!name||!centre){setError("Please enter your name and centre.");return;}setLoading(true);setError("");const{error}=await supabase.auth.signUp({email,password,options:{data:{full_name:name,centre}}});if(error)setError(error.message);else setSuccess("Account created! Check your email to confirm, then sign in.");setLoading(false);}
-  async function handleReset(){setLoading(true);setError("");const{error}=await supabase.auth.resetPasswordForEmail(email);if(error)setError(error.message);else setSuccess("Password reset email sent.");setLoading(false);}
+  async function handleLogin(){
+    setLoading(true);setError("");
+    const{error}=await supabase.auth.signInWithPassword({email,password});
+    if(error){
+      if(error.message.toLowerCase().includes("locked")||error.message.toLowerCase().includes("too many")){setLocked(true);}
+      else setError(error.message);
+    }
+    setLoading(false);
+  }
+  async function handleSignup(){
+    if(!name||!centre){setError("Please enter your name and centre.");return;}
+    setLoading(true);setError("");
+    const{error}=await supabase.auth.signUp({email,password,options:{data:{full_name:name,centre}}});
+    if(error)setError(error.message);
+    else setSuccess("Account created! Check your email to confirm, then sign in.");
+    setLoading(false);
+  }
+  async function handleReset(){
+    if(!email){setError("Enter your email address first.");return;}
+    setLoading(true);setError("");
+    const{error}=await supabase.auth.resetPasswordForEmail(email);
+    if(error)setError(error.message);
+    else setMode("reset_sent");
+    setLoading(false);
+  }
+
+  const LogoMark=({size=48,variant="dark"})=>(
+    <svg width={size} height={size} viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {variant==="dark"?(
+        <>
+          <path d="M40 4 L4 40 L40 76 Z" fill="#4db882"/>
+          <path d="M40 4 L76 40 L40 76 Z" fill="rgba(255,255,255,0.2)"/>
+          <circle cx="40" cy="40" r="7" fill="#0f1c2e"/>
+        </>
+      ):(
+        <>
+          <path d="M40 4 L4 40 L40 76 Z" fill="#1a6b45"/>
+          <path d="M40 4 L76 40 L40 76 Z" fill="#1e3448"/>
+          <circle cx="40" cy="40" r="7" fill="white"/>
+        </>
+      )}
+    </svg>
+  );
+
+  const inputStyle={width:"100%",boxSizing:"border-box",background:"#f7f8fa",border:`1px solid ${error&&!success?"#c0392b":"#d0d8e4"}`,borderRadius:7,padding:"11px 14px",color:"#1e3448",fontSize:14,fontFamily:"'DM Sans', sans-serif",outline:"none",marginBottom:2};
+  const disabledInput={...inputStyle,opacity:0.5,cursor:"not-allowed"};
 
   return (
-    <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans', sans-serif"}}>
-      <div style={{marginBottom:32,textAlign:"center"}}>
-        <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
-          <svg width="56" height="56" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M40 4 L4 40 L40 76 Z" fill="#1a6b45"/>
-            <path d="M40 4 L76 40 L40 76 Z" fill="#1e3448"/>
-            <circle cx="40" cy="40" r="7" fill="white"/>
-          </svg>
+    <div style={{minHeight:"100vh",display:"flex",fontFamily:"'DM Sans', sans-serif"}}>
+      {/* Left brand panel */}
+      <div style={{flex:"0 0 45%",background:"#0f1c2e",display:"flex",flexDirection:"column",justifyContent:"space-between",padding:"48px 52px",minHeight:"100vh",boxSizing:"border-box"}}>
+        {/* Logo */}
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <LogoMark size={40} variant="dark"/>
+          <span style={{fontFamily:"'DM Sans', sans-serif",fontSize:22,letterSpacing:"-0.3px"}}>
+            <span style={{fontWeight:700,color:"#ffffff"}}>Pair</span><span style={{fontWeight:300,color:"#4db882"}}>Path</span>
+          </span>
         </div>
-        <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:32,fontWeight:700,color:"#ffffff",letterSpacing:"-0.5px",marginBottom:6}}>
-          <span style={{color:"#ffffff"}}>Pair</span><span style={{color:"#4db882",fontWeight:300}}>Path</span>
+
+        {/* Hero copy */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",maxWidth:420}}>
+          <div style={{fontFamily:"'DM Serif Display', serif",fontSize:36,lineHeight:1.25,color:"#ffffff",marginBottom:20}}>
+            The match your{" "}
+            <span style={{fontStyle:"italic",color:"#4db882"}}>EHR couldn't make.</span>
+          </div>
+          <div style={{fontSize:15,color:"rgba(255,255,255,0.65)",lineHeight:1.7,marginBottom:40}}>
+            Every willing donor. Every Listed Active recipient. Scored, ranked, and matched — across the exchanges your current workflow was never built to find.
+          </div>
+
+          {/* Stats */}
+          <div style={{display:"flex",gap:32,marginBottom:48}}>
+            {[["6-WAY","Max chain depth"],["0–100","Pair Score range"],["<1 min","Time to match"]].map(([val,label])=>(
+              <div key={label}>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:26,fontWeight:500,color:"#4db882",lineHeight:1}}>{val}</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:4,letterSpacing:"0.08em"}}>{label}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{fontSize:13,color:"#90a4b4"}}>Kidney Paired Donation Registry</div>
+
+        {/* Bottom tagline */}
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",lineHeight:1.6,maxWidth:380,fontStyle:"italic"}}>
+          Built independently, outside of institutional affiliation, by someone inside the transplant field — because this infrastructure should exist.
+        </div>
       </div>
-      <div style={{width:380,background:"#131c26",border:"1px solid #1e2d3d",borderRadius:14,padding:32}}>
-        <div style={{display:"flex",gap:4,marginBottom:24,background:"#1a2535",borderRadius:8,padding:4}}>
-          {[["login","Sign In"],["signup","Create Account"]].map(([m,l])=>(
-            <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:500,background:mode===m?"#0f2d1e":"transparent",color:mode===m?"#4db882":"#9aabb8"}}>{l}</button>
-          ))}
-        </div>
-        {error&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:13}}>{error}</div>}
-        {success&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#0d2a1e",border:"1px solid #1a3028",color:"#4db882",fontSize:13}}>{success}</div>}
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          {mode==="signup"&&<><div><label style={S.label}>FULL NAME</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" style={S.input}/></div><div><label style={S.label}>TRANSPLANT CENTRE</label><input value={centre} onChange={e=>setCentre(e.target.value)} placeholder="e.g. Sutter CPMC" style={S.input}/></div></>}
-          <div><label style={S.label}>EMAIL</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@hospital.org" style={S.input}/></div>
-          <div><label style={S.label}>PASSWORD</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={S.input}/></div>
-          <button onClick={mode==="login"?handleLogin:handleSignup} disabled={loading||!email||!password} style={{...S.btn,background:"#1a6b45",color:"#ffffff",width:"100%",marginTop:4,opacity:(!email||!password)?0.5:1}}>
-            {loading?"Please wait…":mode==="login"?"Sign In":"Create Account"}
-          </button>
-          {mode==="login"&&<button onClick={handleReset} disabled={!email||loading} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:12,padding:"4px 0",opacity:!email?0.4:1}}>Forgot password?</button>}
+
+      {/* Right form panel */}
+      <div style={{flex:1,background:"#ffffff",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 40px",minHeight:"100vh",boxSizing:"border-box"}}>
+        <div style={{width:"100%",maxWidth:400}}>
+          {/* Logo */}
+          <div style={{textAlign:"center",marginBottom:32}}>
+            <LogoMark size={52} variant="light"/>
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:28,fontWeight:700,letterSpacing:"-0.5px",marginTop:12,marginBottom:4}}>
+              <span style={{color:"#1e3448"}}>Pair</span><span style={{color:"#1a6b45",fontWeight:300}}>Path</span>
+            </div>
+            <div style={{fontFamily:"'DM Serif Display', serif",fontSize:14,fontStyle:"italic",color:"#1a6b45"}}>
+              The match your EHR couldn't make.
+            </div>
+          </div>
+
+          {/* Mode tabs — login vs signup */}
+          {mode!=="reset_sent"&&(
+            <div style={{display:"flex",gap:4,marginBottom:24,background:"#f2f0eb",borderRadius:8,padding:4}}>
+              {[["login","Sign In"],["signup","Create Account"]].map(([m,l])=>(
+                <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");setLocked(false);}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:mode===m?"#ffffff":"transparent",color:mode===m?"#1e3448":"#6a7a8a",boxShadow:mode===m?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all 0.15s"}}>{l}</button>
+              ))}
+            </div>
+          )}
+
+          {/* Banners */}
+          {error&&!locked&&(
+            <div style={{marginBottom:16,padding:"12px 14px",borderRadius:8,background:"#fef3cd",border:"1px solid #f0c040",color:"#7a5a00",fontSize:13}}>
+              ⚠ {error}
+            </div>
+          )}
+          {locked&&(
+            <div style={{marginBottom:16,padding:"12px 14px",borderRadius:8,background:"#fef3cd",border:"1px solid #f0c040",color:"#7a5a00",fontSize:13}}>
+              ⚠ Account temporarily locked due to too many attempts. Reset your password to regain access.
+            </div>
+          )}
+          {success&&(
+            <div style={{marginBottom:16,padding:"12px 14px",borderRadius:8,background:"#eafaf1",border:"1px solid #a8d5b5",color:"#1a6b45",fontSize:13}}>
+              ✓ {success}
+            </div>
+          )}
+
+          {/* Reset sent state */}
+          {mode==="reset_sent"?(
+            <div style={{textAlign:"center",padding:"24px 0"}}>
+              <div style={{fontSize:40,marginBottom:12}}>✉️</div>
+              <div style={{fontSize:16,fontWeight:600,color:"#1e3448",marginBottom:8}}>Reset email sent</div>
+              <div style={{fontSize:13,color:"#6a7a8a",lineHeight:1.6,marginBottom:24}}>
+                We sent a reset link to <strong style={{color:"#1e3448"}}>{email}</strong>. The link expires in 30 minutes.
+              </div>
+              <button onClick={handleReset} disabled={loading} style={{background:"none",border:"1px solid #1a6b45",borderRadius:7,padding:"9px 20px",color:"#1a6b45",fontSize:13,cursor:"pointer",marginBottom:12,width:"100%"}}>
+                {loading?"Sending…":"Resend reset email"}
+              </button>
+              <button onClick={()=>{setMode("login");setSuccess("");}} style={{background:"none",border:"none",color:"#6a7a8a",fontSize:12,cursor:"pointer"}}>
+                Back to sign in
+              </button>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {mode==="signup"&&(
+                <>
+                  <div><label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em",display:"block",marginBottom:5}}>FULL NAME</label>
+                  <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" style={locked?disabledInput:inputStyle} disabled={locked}/></div>
+                  <div><label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em",display:"block",marginBottom:5}}>TRANSPLANT CENTRE</label>
+                  <input value={centre} onChange={e=>setCentre(e.target.value)} placeholder="e.g. Sutter CPMC" style={locked?disabledInput:inputStyle} disabled={locked}/></div>
+                </>
+              )}
+              <div>
+                <label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em",display:"block",marginBottom:5}}>EMAIL</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@hospital.org" style={locked||loading?disabledInput:inputStyle} disabled={locked||loading}/>
+              </div>
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                  <label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em"}}>PASSWORD</label>
+                  {mode==="login"&&<button onClick={handleReset} disabled={loading||locked} style={{background:"none",border:"none",color:"#1a6b45",cursor:"pointer",fontSize:11,padding:0}}>Forgot password?</button>}
+                </div>
+                <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={locked||loading?disabledInput:inputStyle} disabled={locked||loading}/>
+              </div>
+
+              {/* Primary button */}
+              <button
+                onClick={mode==="login"?handleLogin:handleSignup}
+                disabled={loading||locked||!email||!password}
+                style={{background:locked?"#d0d8e4":"#1a6b45",color:locked?"#6a7a8a":"#ffffff",border:"none",borderRadius:7,padding:"12px",fontSize:14,fontWeight:600,cursor:locked?"not-allowed":"pointer",width:"100%",marginTop:4,fontFamily:"'DM Sans', sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:(!email||!password)&&!locked?0.5:1,transition:"all 0.15s"}}>
+                {loading?(
+                  <><span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#ffffff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>Signing in…</>
+                ):locked?"Account temporarily locked":error?"Try again":mode==="login"?"Sign in to PairPath":"Create Account"}
+              </button>
+              {locked&&(
+                <button onClick={handleReset} style={{background:"none",border:"1px solid #1a6b45",borderRadius:7,padding:"10px",color:"#1a6b45",fontSize:13,fontWeight:600,cursor:"pointer",width:"100%",fontFamily:"'DM Sans', sans-serif"}}>
+                  Reset my password
+                </button>
+              )}
+
+              {/* Demo divider */}
+              {mode==="login"&&!locked&&(
+                <>
+                  <div style={{display:"flex",alignItems:"center",gap:12,margin:"4px 0"}}>
+                    <div style={{flex:1,height:1,background:"#e8ecf0"}}/>
+                    <span style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#9aabb8",letterSpacing:"0.08em"}}>NO ACCOUNT?</span>
+                    <div style={{flex:1,height:1,background:"#e8ecf0"}}/>
+                  </div>
+                  <button onClick={onDemoMode} style={{background:"none",border:"1px solid #1e3448",borderRadius:7,padding:"10px",color:"#1e3448",fontSize:13,fontWeight:600,cursor:"pointer",width:"100%",fontFamily:"'DM Sans', sans-serif"}}>
+                    Explore Demo Mode
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{marginTop:32,textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:10,color:"#b0bec5",letterSpacing:"0.06em",lineHeight:1.8}}>
+            pairpath.org · Independent clinical tool · Not yet clinically validated
+          </div>
         </div>
       </div>
-      <div style={{marginTop:24,fontSize:11,color:"#6a8090",textAlign:"center",maxWidth:380,lineHeight:1.6}}>
-        PairPath is a coordinator-facing clinical tool. All matches require crossmatch confirmation before any clinical decision.
-      </div>
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:768px){.pp-left{display:none!important}}`}</style>
     </div>
   );
 }
@@ -788,10 +956,10 @@ export default function App() {
   },[view,pairs,demoMode]);
 
   if(authLoading) return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
-  if(!session) return <AuthScreen/>;
+  if(!session&&!demoMode) return <AuthScreen onDemoMode={()=>setDemoMode(true)}/>;
 
-  const currentUserId=session.user.id;
-  const userMeta=session.user.user_metadata||{};
+  const currentUserId=session?.user?.id||"demo";
+  const userMeta=session?.user?.user_metadata||{};
   const isAdmin=userMeta.role==="admin";
   // Extract email domain for centre grouping — @sutterhealth.org groups all Sutter users
   const userEmail=session.user.email||"";
@@ -813,7 +981,7 @@ export default function App() {
 
   function addAudit(action,detail){
     if(demoMode) return;
-    setAuditLog(prev=>[{action,detail,user:userMeta.full_name||session.user.email,time:new Date().toLocaleString(),id:Date.now()},...prev].slice(0,100));
+    setAuditLog(prev=>[{action,detail,user:userMeta.full_name||session?.user?.email||"Demo",time:new Date().toLocaleString(),id:Date.now()},...prev].slice(0,100));
   }
   const centres=[...new Set(visiblePairs.map(p=>p.centre).filter(Boolean))];
 
@@ -1440,15 +1608,16 @@ export default function App() {
           ))}
         </nav>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
-          <span style={{fontSize:12,color:"#b0bec5"}}>{userMeta.full_name||session.user.email}</span>
+          <span style={{fontSize:12,color:"#b0bec5"}}>{demoMode?"Demo Mode":userMeta.full_name||session?.user?.email}</span>
           {isAdmin&&<span style={S.tag("#ffd166")}>Admin</span>}
           {!isAdmin&&hasCentreDomain&&<span style={{...S.tag("#6ab4d0"),fontSize:10}} title={`Sharing data with all @${userDomain} users`}>@{userDomain}</span>}
-          {!isAdmin&&!hasCentreDomain&&<span style={{...S.tag("#90a4b4"),fontSize:10}}>Personal</span>}
-          {isAdmin&&<button onClick={()=>setShowAudit(v=>!v)} style={{...S.btn,padding:"4px 10px",background:showAudit?"#1a2e24":"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:11}}>Audit</button>}
+          {!isAdmin&&!hasCentreDomain&&!demoMode&&<span style={{...S.tag("#90a4b4"),fontSize:10}}>Personal</span>}
+          {isAdmin&&<button onClick={()=>setShowAudit(v=>!v)} style={{...S.btn,padding:"4px 10px",background:showAudit?"#0f2d1e":"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:11}}>Audit</button>}
           {userMeta.centre&&<span style={S.tag("#3d5060")}>{userMeta.centre}</span>}
-          <div style={{width:7,height:7,borderRadius:"50%",background:"#2dd4a0"}}/>
+          <div style={{width:7,height:7,borderRadius:"50%",background:"#4db882"}}/>
           <span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#4db882"}}>{activePairs.length} ACTIVE</span>
-          <button onClick={()=>supabase.auth.signOut()} style={{...S.btn,padding:"5px 12px",background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:12}}>Sign Out</button>
+          {session&&<button onClick={()=>supabase.auth.signOut()} style={{...S.btn,padding:"5px 12px",background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:12}}>Sign Out</button>}
+          {!session&&demoMode&&<button onClick={()=>setDemoMode(false)} style={{...S.btn,padding:"5px 12px",background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:12}}>Exit Demo</button>}
         </div>
       </header>
 
