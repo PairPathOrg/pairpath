@@ -509,7 +509,7 @@ function autoDetect(headers, pairType="paired") {
 const S = {
   app: {minHeight:"100vh",background:"#131c26",color:"#ffffff",fontFamily:"'DM Sans', sans-serif",fontSize:14},
   header: {borderBottom:"1px solid #1e2d3d",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,background:"#0a0f18",gap:12},
-  navBtn: a => ({padding:"8px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:14,fontWeight:600,background:a?"#1a3a28":"transparent",color:a?"#2dd4a0":"#c0cdd8",transition:"all 0.15s"}),
+  navBtn: a => ({padding:"8px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:14,fontWeight:600,background:a?"#0f2d1e":"transparent",color:a?"#4db882":"#c0cdd8",transition:"all 0.15s"}),
   page: {padding:"28px 32px",maxWidth:1400,margin:"0 auto"},
   pageTitle: {fontFamily:"'DM Serif Display', serif",fontSize:28,fontWeight:400,margin:"0 0 6px",color:"#ffffff"},
   subtitle: {margin:"0 0 24px",color:"#b0bec5",fontSize:14},
@@ -545,25 +545,34 @@ function AuthScreen() {
   return (
     <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans', sans-serif"}}>
       <div style={{marginBottom:32,textAlign:"center"}}>
-        <div style={{fontFamily:"'DM Serif Display', serif",fontSize:36,color:"#ffffff",marginBottom:8}}>PairPath</div>
-        <div style={{fontSize:13,color:"#3d8c6e"}}>Kidney Paired Donation Registry</div>
+        <div style={{display:"flex",justifyContent:"center",marginBottom:14}}>
+          <svg width="56" height="56" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M40 4 L4 40 L40 76 Z" fill="#1a6b45"/>
+            <path d="M40 4 L76 40 L40 76 Z" fill="#1e3448"/>
+            <circle cx="40" cy="40" r="7" fill="white"/>
+          </svg>
+        </div>
+        <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:32,fontWeight:700,color:"#ffffff",letterSpacing:"-0.5px",marginBottom:6}}>
+          <span style={{color:"#ffffff"}}>Pair</span><span style={{color:"#4db882",fontWeight:300}}>Path</span>
+        </div>
+        <div style={{fontSize:13,color:"#90a4b4"}}>Kidney Paired Donation Registry</div>
       </div>
       <div style={{width:380,background:"#131c26",border:"1px solid #1e2d3d",borderRadius:14,padding:32}}>
         <div style={{display:"flex",gap:4,marginBottom:24,background:"#1a2535",borderRadius:8,padding:4}}>
           {[["login","Sign In"],["signup","Create Account"]].map(([m,l])=>(
-            <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:500,background:mode===m?"#1a2e24":"transparent",color:mode===m?"#2dd4a0":"#9aabb8"}}>{l}</button>
+            <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:500,background:mode===m?"#0f2d1e":"transparent",color:mode===m?"#4db882":"#9aabb8"}}>{l}</button>
           ))}
         </div>
         {error&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:13}}>{error}</div>}
-        {success&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#0d2a1e",border:"1px solid #1a3028",color:"#2dd4a0",fontSize:13}}>{success}</div>}
+        {success&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:8,background:"#0d2a1e",border:"1px solid #1a3028",color:"#4db882",fontSize:13}}>{success}</div>}
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {mode==="signup"&&<><div><label style={S.label}>FULL NAME</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" style={S.input}/></div><div><label style={S.label}>TRANSPLANT CENTRE</label><input value={centre} onChange={e=>setCentre(e.target.value)} placeholder="e.g. Sutter CPMC" style={S.input}/></div></>}
           <div><label style={S.label}>EMAIL</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@hospital.org" style={S.input}/></div>
           <div><label style={S.label}>PASSWORD</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={S.input}/></div>
-          <button onClick={mode==="login"?handleLogin:handleSignup} disabled={loading||!email||!password} style={{...S.btn,background:"#2dd4a0",color:"#0a1a14",width:"100%",marginTop:4,opacity:(!email||!password)?0.5:1}}>
+          <button onClick={mode==="login"?handleLogin:handleSignup} disabled={loading||!email||!password} style={{...S.btn,background:"#1a6b45",color:"#ffffff",width:"100%",marginTop:4,opacity:(!email||!password)?0.5:1}}>
             {loading?"Please wait…":mode==="login"?"Sign In":"Create Account"}
           </button>
-          {mode==="login"&&<button onClick={handleReset} disabled={!email||loading} style={{background:"none",border:"none",color:"#3d8c6e",cursor:"pointer",fontSize:12,padding:"4px 0",opacity:!email?0.4:1}}>Forgot password?</button>}
+          {mode==="login"&&<button onClick={handleReset} disabled={!email||loading} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:12,padding:"4px 0",opacity:!email?0.4:1}}>Forgot password?</button>}
         </div>
       </div>
       <div style={{marginTop:24,fontSize:11,color:"#6a8090",textAlign:"center",maxWidth:380,lineHeight:1.6}}>
@@ -635,7 +644,7 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
 
       <div style={{display:"flex",gap:10}}>
         <button onClick={()=>onConfirm(cleanedMapping)}
-          style={{...S.btn,background:"#2dd4a0",color:"#0a1a14"}}>
+          style={{...S.btn,background:"#1a6b45",color:"#ffffff"}}>
           Import with This Mapping
         </button>
         <button onClick={onCancel} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>
@@ -778,7 +787,7 @@ export default function App() {
     return()=>clearTimeout(timeout);
   },[view,pairs,demoMode]);
 
-  if(authLoading) return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#3d8c6e",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
+  if(authLoading) return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
   if(!session) return <AuthScreen/>;
 
   const currentUserId=session.user.id;
@@ -1244,7 +1253,7 @@ export default function App() {
               </div>
               <div style={{fontSize:12,color:"#b0bec5",marginBottom:16}}>
                 {xlsxResults.length+1} of {xlsxResults.length+xlsxSheets.length} sheets
-                {knownMapping&&<span style={{color:"#2dd4a0",marginLeft:8}}>✓ Saved mapping recognised — review and confirm</span>}
+                {knownMapping&&<span style={{color:"#4db882",marginLeft:8}}>✓ Saved mapping recognised — review and confirm</span>}
               </div>
 
               {/* Pair type selector for this sheet */}
@@ -1320,13 +1329,13 @@ export default function App() {
                 <div style={{display:"flex",gap:10,alignItems:"center"}}>
                   {r.error&&r.error!=="Skipped"&&<span style={{color:"#ff8a8a",fontSize:11}}>{r.error}</span>}
                   {r.error==="Skipped"&&<span style={{color:"#90a4b4",fontSize:11}}>Skipped</span>}
-                  {!r.error&&<span style={{color:"#2dd4a0",fontSize:12}}>{r.imported} imported</span>}
+                  {!r.error&&<span style={{color:"#4db882",fontSize:12}}>{r.imported} imported</span>}
                   {r.dupes>0&&<span style={{color:"#ffd166",fontSize:11}}>{r.dupes} dupes skipped</span>}
                 </div>
               </div>
             ))}
             <div style={{marginTop:16,display:"flex",justifyContent:"flex-end"}}>
-              <button onClick={()=>{setXlsxSummaryVisible(false);setXlsxResults([]);}} style={{...S.btn,background:"#2dd4a0",color:"#0a1a14"}}>Done</button>
+              <button onClick={()=>{setXlsxSummaryVisible(false);setXlsxResults([]);}} style={{...S.btn,background:"#1a6b45",color:"#ffffff"}}>Done</button>
             </div>
           </div>
         </div>
@@ -1396,7 +1405,7 @@ export default function App() {
               </div>
             ))}
             <div style={{display:"flex",gap:8,marginTop:16}}>
-              <button onClick={()=>{setMatchDetail(null);openDetail(matchDetail.donor,matchDetail.recipient);}} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0",flex:1}}>Full Pair Score Report</button>
+              <button onClick={()=>{setMatchDetail(null);openDetail(matchDetail.donor,matchDetail.recipient);}} style={{...S.btn,background:"#0f2d1e",color:"#4db882",flex:1}}>Full Pair Score Report</button>
               <button onClick={()=>setMatchDetail(null)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Close</button>
             </div>
           </div>
@@ -1406,7 +1415,14 @@ export default function App() {
       {/* Header */}
       <header style={S.header}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-          <span style={{fontFamily:"'DM Serif Display', serif",fontSize:20,color:"#ffffff"}}>PairPath</span>
+          <svg width="32" height="32" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M40 4 L4 40 L40 76 Z" fill="#4db882"/>
+            <path d="M40 4 L76 40 L40 76 Z" fill="rgba(255,255,255,0.22)"/>
+            <circle cx="40" cy="40" r="7" fill="#0f1c2e"/>
+          </svg>
+          <span style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,letterSpacing:"-0.3px"}}>
+            <span style={{fontWeight:700,color:"#ffffff"}}>Pair</span><span style={{fontWeight:300,color:"#4db882"}}>Path</span>
+          </span>
           {false&&<button onClick={()=>setAppMode(m=>m==="solo"?"national":"solo")}
             style={{...S.tag(appMode==="national"?"#6ab4d0":"#3d8c6e"),cursor:"pointer",border:"none",background:appMode==="national"?"#6ab4d022":"#3d8c6e22"}}>
             {appMode.toUpperCase()}
@@ -1431,7 +1447,7 @@ export default function App() {
           {isAdmin&&<button onClick={()=>setShowAudit(v=>!v)} style={{...S.btn,padding:"4px 10px",background:showAudit?"#1a2e24":"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:11}}>Audit</button>}
           {userMeta.centre&&<span style={S.tag("#3d5060")}>{userMeta.centre}</span>}
           <div style={{width:7,height:7,borderRadius:"50%",background:"#2dd4a0"}}/>
-          <span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#3d8c6e"}}>{activePairs.length} ACTIVE</span>
+          <span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#4db882"}}>{activePairs.length} ACTIVE</span>
           <button onClick={()=>supabase.auth.signOut()} style={{...S.btn,padding:"5px 12px",background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:12}}>Sign Out</button>
         </div>
       </header>
@@ -1462,7 +1478,7 @@ export default function App() {
           {activePairs.filter(p=>p.donor_blood_type).length===0?(
             <div style={{textAlign:"center",padding:80,color:"#5a6a7a"}}>
               <div style={{fontSize:13,marginBottom:16}}>No active pairs with donors yet</div>
-              <button onClick={()=>setView("add")} style={{...S.btn,background:"#2dd4a0",color:"#0a1a14"}}>Register First Pair</button>
+              <button onClick={()=>setView("add")} style={{...S.btn,background:"#1a6b45",color:"#ffffff"}}>Register First Pair</button>
             </div>
           ):(
             <div style={{overflowX:"auto",borderRadius:12,border:"1px solid #1e2d3d"}}>
@@ -1475,7 +1491,7 @@ export default function App() {
                     {activePairs.filter(p=>p.donor_blood_type).map(p=>(
                       <th key={p.id} style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #1e2d3d",borderRight:"1px solid #1e2d3d",minWidth:90}}>
                         <div style={{fontSize:12,fontWeight:600,color:"#ffffff"}}>{(p.donor_name||"Altruistic").split(" ")[0]}</div>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#3d8c6e",marginTop:2}}>{p.donor_blood_type}</div>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#4db882",marginTop:2}}>{p.donor_blood_type}</div>
                         {p.pair_type==="altruistic"&&<div style={{fontSize:9,color:"#ffd166",marginTop:1}}>ALT</div>}
                         {p.donor_priority&&p.pair_type==="paired"&&<div style={{fontSize:9,color:{Primary:"#2dd4a0",Secondary:"#6ab4d0",Tertiary:"#ffd166"}[p.donor_priority]||"#90a4b4",marginTop:1}}>{p.donor_priority.slice(0,3).toUpperCase()}</div>}
                       </th>
@@ -1543,7 +1559,7 @@ export default function App() {
                 {uploading?"Uploading…":"Bulk Upload CSV / Excel"}
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
               </label>
-              <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0"}}>Export CSV</button>
+              <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Export CSV</button>
               <button onClick={()=>exportMatches(visiblePairs)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}} title="Export all compatible donor-recipient matches as a clean two-column list — ideal for anonymized data">Export Matches</button>
             </div>
           </div>
@@ -1749,7 +1765,7 @@ export default function App() {
           <h1 style={S.pageTitle}>Chain Identification</h1>
           <p style={S.subtitle}>Compatible exchange chains across all active pairs. Chains longer than 6-way are rare in practice and logistically complex to coordinate.</p>
           {chainsLoading?(
-            <div style={{textAlign:"center",padding:60,color:"#3d8c6e",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
+            <div style={{textAlign:"center",padding:60,color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
           ):chains.length===0?(
             <div style={{textAlign:"center",padding:60,color:"#5a6a7a",fontSize:13}}>
               No compatible chains found yet — add incompatible pairs to identify exchange opportunities
@@ -1774,19 +1790,19 @@ export default function App() {
                           <div style={{padding:"10px 14px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52",minWidth:100}}>
                             <div style={{fontSize:12,fontWeight:600,color:"#6ab4d0"}}>
                               {link.donorName.split(" ")[0]}
-                              <span style={{fontSize:10,color:"#3d8c6e",marginLeft:4}}>({link.donorBlood})</span>
+                              <span style={{fontSize:10,color:"#4db882",marginLeft:4}}>({link.donorBlood})</span>
                               {link.altruistic&&<span style={{fontSize:9,color:"#ffd166",marginLeft:4}}>ALT</span>}
                             </div>
                             <div style={{fontSize:10,color:"#5a6a7a",margin:"4px 0",textAlign:"center"}}>donates to</div>
                             <div style={{fontSize:12,fontWeight:600,color:"#6ad0a0"}}>
                               {link.recipientName?.split(" ")[0]||"—"}
-                              <span style={{fontSize:10,color:"#3d8c6e",marginLeft:4}}>({link.recipientBlood})</span>
+                              <span style={{fontSize:10,color:"#4db882",marginLeft:4}}>({link.recipientBlood})</span>
                             </div>
                             <div style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:s.text,marginTop:5,textAlign:"center"}}>
                               {link.score}
                             </div>
                           </div>
-                          {li<chain.length-1&&<div style={{padding:"0 8px",color:"#2dd4a0",fontSize:20}}>→</div>}
+                          {li<chain.length-1&&<div style={{padding:"0 8px",color:"#4db882",fontSize:20}}>→</div>}
                         </div>
                       );
                     })}
@@ -1807,14 +1823,14 @@ export default function App() {
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:24}}>
             {[
               {label:"Total Entries",value:stats.total,color:"#b0bec5"},
-              {label:"Active",value:stats.active,color:"#2dd4a0"},
+              {label:"Active",value:stats.active,color:"#4db882"},
               {label:"High Urgency",value:stats.highUrgency,color:"#ff8a8a"},
               {label:"With Match",value:stats.withMatch,color:"#6effc6"},
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
               {label:"Completed",value:stats.completed,color:"#6ab4d0"},
               {label:"Withdrawn",value:stats.withdrawn,color:"#5a6a7a"},
-              {label:"2-Way Chains",value:stats.chains2,color:"#2dd4a0"},
+              {label:"2-Way Chains",value:stats.chains2,color:"#4db882"},
               {label:"3-Way Chains",value:stats.chains3,color:"#6ab4d0"},
               {label:"4+ Way Chains",value:stats.chainsLong,color:"#ffd166"},
             ].map(({label,value,color})=>(
@@ -1846,7 +1862,7 @@ export default function App() {
             <div style={S.card}>
               <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>HIGH URGENCY — NO MATCH YET</div>
               {activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length===0?(
-                <div style={{fontSize:13,color:"#2dd4a0"}}>All high urgency recipients have at least one compatible match ✓</div>
+                <div style={{fontSize:13,color:"#4db882"}}>All high urgency recipients have at least one compatible match ✓</div>
               ):(
                 activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).map(p=>(
                   <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,fontSize:12}}>
@@ -2004,7 +2020,7 @@ export default function App() {
                     {/* Best donor */}
                     {best?(
                       <>
-                        <div style={{fontSize:10,color:"#3d8c6e",fontFamily:"'DM Mono', monospace",marginBottom:6}}>BEST COMPATIBLE DONOR</div>
+                        <div style={{fontSize:10,color:"#4db882",fontFamily:"'DM Mono', monospace",marginBottom:6}}>BEST COMPATIBLE DONOR</div>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
                           <span style={{fontSize:14,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
                           <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
@@ -2179,7 +2195,7 @@ export default function App() {
                   <div style={{borderTop:"1px solid #1e2d3d",paddingTop:12}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                       <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#6a8090"}}>(optional)</span></label>
-                      <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#3d8c6e",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
+                      <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
                         {showHLAAdvanced?"▲ hide":"▼ individual fields"}
                       </button>
                     </div>
@@ -2245,7 +2261,7 @@ export default function App() {
                   <div style={{borderTop:"1px solid #1e2d3d",paddingTop:12}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                       <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#6a8090"}}>(optional)</span></label>
-                      <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#3d8c6e",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
+                      <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
                         {showHLAAdvanced?"▲ hide":"▼ individual fields"}
                       </button>
                     </div>
@@ -2316,7 +2332,7 @@ export default function App() {
           </div>
 
           <div style={{display:"flex",gap:12}}>
-            <button onClick={handleAdd} disabled={adding} style={{...S.btn,background:"#2dd4a0",color:"#0a1a14"}}>
+            <button onClick={handleAdd} disabled={adding} style={{...S.btn,background:"#1a6b45",color:"#ffffff"}}>
               {adding?(editingPair?"Saving…":"Registering…"):(editingPair?"Save Changes":"Register")}
             </button>
             <button onClick={()=>{setView("grid");setEditingPair(null);setForm(emptyForm);}}
@@ -2333,7 +2349,7 @@ export default function App() {
         const dAge=calcAge(donor.donor_year_born),rAge=calcAge(recipient.recipient_year_born);
         return (
           <div style={{...S.page,maxWidth:860}}>
-            <button onClick={()=>setView("grid")} style={{background:"none",border:"none",color:"#3d8c6e",cursor:"pointer",fontFamily:"'DM Mono', monospace",fontSize:12,padding:0,marginBottom:24,letterSpacing:"0.05em"}}>← BACK TO GRID</button>
+            <button onClick={()=>setView("grid")} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontFamily:"'DM Mono', monospace",fontSize:12,padding:0,marginBottom:24,letterSpacing:"0.05em"}}>← BACK TO GRID</button>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:28,flexWrap:"wrap",gap:16}}>
               <div>
                 <h1 style={S.pageTitle}>Pair Score Report</h1>
@@ -2400,7 +2416,7 @@ export default function App() {
               </table>
             </div>
             <div style={{display:"flex",gap:10,marginBottom:16}}>
-              <button onClick={()=>window.print()} style={{...S.btn,background:"#1a2e24",color:"#2dd4a0"}}>Print Report</button>
+              <button onClick={()=>window.print()} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Print Report</button>
             </div>
             <div style={{padding:"12px 16px",borderRadius:8,background:"#0d1a14",border:"1px solid #1a3028",fontSize:12,color:"#3d6a50"}}>
               ⚠ Pair Score is a computational screening tool, not a validated clinical index. Weights are provisional and should be reviewed with transplant professionals before operational use. All matches require crossmatch confirmation before any clinical decision.
