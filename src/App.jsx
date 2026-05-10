@@ -511,7 +511,7 @@ const S = {
   header: {borderBottom:"1px solid #1e2d3d",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,background:"#0a0f18",gap:12},
   navBtn: a => ({padding:"8px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:14,fontWeight:600,background:a?"#0f2d1e":"transparent",color:a?"#4db882":"#c0cdd8",transition:"all 0.15s"}),
   page: {padding:"28px 32px",maxWidth:1400,margin:"0 auto"},
-  pageTitle: {fontFamily:"'DM Serif Display', serif",fontSize:28,fontWeight:400,margin:"0 0 6px",color:"#ffffff"},
+  pageTitle: {fontFamily:"'DM Sans', sans-serif",fontSize:28,fontWeight:700,margin:"0 0 6px",color:"#ffffff"},
   subtitle: {margin:"0 0 24px",color:"#b0bec5",fontSize:14},
   card: {background:"#131c26",border:"1px solid #1e2d3d",borderRadius:12,padding:18},
   input: {width:"100%",boxSizing:"border-box",background:"#1a2535",border:"1px solid #2a3d52",borderRadius:6,padding:"10px 12px",color:"#ffffff",fontSize:14,fontFamily:"'DM Sans', sans-serif",outline:"none"},
@@ -605,9 +605,9 @@ function AuthScreen({onDemoMode}) {
 
         {/* Hero copy */}
         <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"center",maxWidth:420}}>
-          <div style={{fontFamily:"'DM Serif Display', serif",fontSize:36,lineHeight:1.25,color:"#ffffff",marginBottom:20}}>
+          <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:36,lineHeight:1.25,color:"#ffffff",marginBottom:20}}>
             The match your{" "}
-            <span style={{fontStyle:"italic",color:"#4db882"}}>EHR couldn't make.</span>
+            <span style={{fontStyle:"italic",fontWeight:300,color:"#4db882"}}>EHR couldn't make.</span>
           </div>
           <div style={{fontSize:15,color:"rgba(255,255,255,0.65)",lineHeight:1.7,marginBottom:40}}>
             Every willing donor. Every Listed Active recipient. Scored, ranked, and matched — across the exchanges your current workflow was never built to find.
@@ -639,8 +639,8 @@ function AuthScreen({onDemoMode}) {
             <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:28,fontWeight:700,letterSpacing:"-0.5px",marginTop:12,marginBottom:4}}>
               <span style={{color:"#1e3448"}}>Pair</span><span style={{color:"#1a6b45",fontWeight:300}}>Path</span>
             </div>
-            <div style={{fontFamily:"'DM Serif Display', serif",fontSize:14,fontStyle:"italic",color:"#1a6b45"}}>
-              The match your EHR couldn't make.
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:14,fontWeight:300,color:"#1a6b45"}}>
+              Every exchange starts here.
             </div>
           </div>
 
@@ -772,7 +772,7 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
 
   const inner = (
     <div style={inline?{}:{...S.card,maxWidth:700,width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
-      {!inline&&<div style={{fontFamily:"'DM Serif Display', serif",fontSize:22,color:"#ffffff",marginBottom:4}}>Map Your Columns</div>}
+      {!inline&&<div style={{fontFamily:"'DM Sans', sans-serif",fontSize:22,color:"#ffffff",marginBottom:4}}>Map Your Columns</div>}
       {!inline&&<p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Match your spreadsheet columns to PairPath fields. Auto-detected matches are pre-filled.</p>}
 
       {preview?.length > 0 && (
@@ -961,8 +961,7 @@ export default function App() {
   const currentUserId=session?.user?.id||"demo";
   const userMeta=session?.user?.user_metadata||{};
   const isAdmin=userMeta.role==="admin";
-  // Extract email domain for centre grouping — @sutterhealth.org groups all Sutter users
-  const userEmail=session.user.email||"";
+  const userEmail=session?.user?.email||"";
   const userDomain=userEmail.includes("@")?userEmail.split("@")[1].toLowerCase():"";
   // Special domains that shouldn't be used for grouping (personal emails)
   const PERSONAL_DOMAINS=["gmail.com","yahoo.com","hotmail.com","outlook.com","icloud.com","me.com","aol.com","protonmail.com","mail.com"];
@@ -1343,7 +1342,7 @@ export default function App() {
       {showUploadTypeSelect&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
           <div style={{...S.card,maxWidth:500,width:"90%"}}>
-            <div style={{fontFamily:"'DM Serif Display', serif",fontSize:22,color:"#ffffff",marginBottom:8}}>What are you uploading?</div>
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:22,color:"#ffffff",marginBottom:8}}>What are you uploading?</div>
             <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Select the type so PairPath shows the right field mapping options.</p>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
               {PAIR_TYPES.map(t=>(
@@ -1416,7 +1415,7 @@ export default function App() {
                 })}
               </div>
 
-              <div style={{fontFamily:"'DM Serif Display', serif",fontSize:20,color:"#ffffff",marginBottom:4}}>
+              <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,color:"#ffffff",marginBottom:4}}>
                 Map columns — <span style={{color:"#6ab4d0"}}>{sheet.name}</span>
               </div>
               <div style={{fontSize:12,color:"#b0bec5",marginBottom:16}}>
@@ -1489,7 +1488,7 @@ export default function App() {
       {xlsxSummaryVisible&&xlsxResults.length>0&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
           <div style={{...S.card,maxWidth:500,width:"90%"}}>
-            <div style={{fontFamily:"'DM Serif Display', serif",fontSize:22,color:"#ffffff",marginBottom:4}}>Import Complete</div>
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:22,color:"#ffffff",marginBottom:4}}>Import Complete</div>
             <div style={{fontSize:12,color:"#b0bec5",marginBottom:16}}>{xlsxResults.length} sheet{xlsxResults.length!==1?"s":""} processed</div>
             {xlsxResults.map((r,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #141c24",fontSize:13}}>
@@ -2327,7 +2326,7 @@ export default function App() {
               <div style={S.card}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
                   <div style={{width:3,height:18,borderRadius:2,background:"#3d8c6e"}}/>
-                  <span style={{fontFamily:"'DM Serif Display', serif",fontSize:18,color:"#ffffff"}}>Recipient</span>
+                  <span style={{fontFamily:"'DM Sans', sans-serif",fontSize:18,color:"#ffffff"}}>Recipient</span>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   <Field label="Full Name *" value={form.recipient_name} onChange={v=>setForm(f=>({...f,recipient_name:v}))}/>
@@ -2393,7 +2392,7 @@ export default function App() {
               <div style={S.card}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
                   <div style={{width:3,height:18,borderRadius:2,background:"#2d6e8c"}}/>
-                  <span style={{fontFamily:"'DM Serif Display', serif",fontSize:18,color:"#ffffff"}}>{form.pair_type==="altruistic"?"Altruistic Donor":"Donor"}</span>
+                  <span style={{fontFamily:"'DM Sans', sans-serif",fontSize:18,color:"#ffffff"}}>{form.pair_type==="altruistic"?"Altruistic Donor":"Donor"}</span>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   <Field label="Full Name *" value={form.donor_name} onChange={v=>setForm(f=>({...f,donor_name:v}))}/>
