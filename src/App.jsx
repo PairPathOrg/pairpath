@@ -554,7 +554,7 @@ function AuthScreen({onDemoMode}) {
     setLoading(false);
   }
   async function handleSignup(){
-    if(!name||!centre){setError("Please enter your name and centre.");return;}
+    if(!name||!centre){setError("Please enter your name and transplant center.");return;}
     setLoading(true);setError("");
     const{error}=await supabase.auth.signUp({email,password,options:{data:{full_name:name,centre}}});
     if(error)setError(error.message);
@@ -691,8 +691,8 @@ function AuthScreen({onDemoMode}) {
                 <>
                   <div><label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em",display:"block",marginBottom:5}}>FULL NAME</label>
                   <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" style={locked?disabledInput:inputStyle} disabled={locked}/></div>
-                  <div><label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em",display:"block",marginBottom:5}}>TRANSPLANT CENTRE</label>
-                  <input value={centre} onChange={e=>setCentre(e.target.value)} placeholder="e.g. Sutter CPMC" style={locked?disabledInput:inputStyle} disabled={locked}/></div>
+                  <div><label style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a7a8a",letterSpacing:"0.08em",display:"block",marginBottom:5}}>TRANSPLANT CENTER</label>
+                  <input value={centre} onChange={e=>setCentre(e.target.value)} placeholder="Your transplant center" style={locked?disabledInput:inputStyle} disabled={locked}/></div>
                 </>
               )}
               <div>
@@ -2043,7 +2043,7 @@ export default function App() {
             </div>
             {appMode==="national"&&centres.length>0&&(
               <div style={S.card}>
-                <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTRE</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTER</div>
                 {centres.map(c=>{
                   const count=visiblePairs.filter(p=>p.centre===c).length;
                   const pct=visiblePairs.length?Math.round((count/visiblePairs.length)*100):0;
@@ -2488,7 +2488,7 @@ export default function App() {
                   </select>
                 </div>
               )}
-              <div><label style={S.label}>TRANSPLANT CENTRE</label>
+              <div><label style={S.label}>TRANSPLANT CENTER</label>
                 <input value={form.centre||userMeta.centre||""} onChange={e=>setForm(f=>({...f,centre:e.target.value}))} style={S.input} placeholder={userMeta.centre||"Your centre"}/>
               </div>
             </div>
