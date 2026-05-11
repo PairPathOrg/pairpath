@@ -550,7 +550,7 @@ function AuthScreen({onDemoMode}) {
         <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)}
           style={{marginTop:2,flexShrink:0,accentColor:"#1a6b45",width:15,height:15}}/>
         <span style={{fontSize:12,color:"#3a4f66",lineHeight:1.55}}>
-          I understand that PairPath is an independent, non-validated clinical tool. All data is handled confidentially and all matches require crossmatch confirmation before any clinical decision.
+          By accessing this demo, you agree that everything you see is confidential and proprietary to PairPath LLC.
         </span>
       </label>
     </div>
