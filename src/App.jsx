@@ -542,6 +542,19 @@ function AuthScreen({onDemoMode}) {
   const [error,setError]=useState("");
   const [success,setSuccess]=useState("");
   const [locked,setLocked]=useState(false);
+  const [agreed,setAgreed]=useState(false);
+
+  const ConfidentialityBox=()=>(
+    <div style={{padding:"12px 14px",borderRadius:8,background:"#f7f8fa",border:`1px solid ${agreed?"#a8d5b5":"#d0d8e4"}`,marginBottom:4,transition:"border-color 0.2s"}}>
+      <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+        <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)}
+          style={{marginTop:2,flexShrink:0,accentColor:"#1a6b45",width:15,height:15}}/>
+        <span style={{fontSize:12,color:"#3a4f66",lineHeight:1.55}}>
+          I understand that PairPath is an independent, non-validated clinical tool. All data is handled confidentially and all matches require crossmatch confirmation before any clinical decision.
+        </span>
+      </label>
+    </div>
+  );
   const [demoEntry,setDemoEntry]=useState(false);
 
   async function handleLogin(){
@@ -707,11 +720,14 @@ function AuthScreen({onDemoMode}) {
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={locked||loading?disabledInput:inputStyle} disabled={locked||loading}/>
               </div>
 
+              {/* Confidentiality checkbox — required for signup and demo */}
+              {(mode==="signup")&&<ConfidentialityBox/>}
+
               {/* Primary button */}
               <button
                 onClick={mode==="login"?handleLogin:handleSignup}
-                disabled={loading||locked||!email||!password}
-                style={{background:locked?"#d0d8e4":"#1a6b45",color:locked?"#6a7a8a":"#ffffff",border:"none",borderRadius:7,padding:"12px",fontSize:14,fontWeight:600,cursor:locked?"not-allowed":"pointer",width:"100%",marginTop:4,fontFamily:"'DM Sans', sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:(!email||!password)&&!locked?0.5:1,transition:"all 0.15s"}}>
+                disabled={loading||locked||!email||!password||(mode==="signup"&&!agreed)}
+                style={{background:locked?"#d0d8e4":"#1a6b45",color:locked?"#6a7a8a":"#ffffff",border:"none",borderRadius:7,padding:"12px",fontSize:14,fontWeight:600,cursor:(locked||(mode==="signup"&&!agreed))?"not-allowed":"pointer",width:"100%",marginTop:4,fontFamily:"'DM Sans', sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8,opacity:((!email||!password)||(mode==="signup"&&!agreed))&&!locked?0.5:1,transition:"all 0.15s"}}>
                 {loading?(
                   <><span style={{display:"inline-block",width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"#ffffff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>Signing in…</>
                 ):locked?"Account temporarily locked":error?"Try again":mode==="login"?"Sign in to PairPath":"Create Account"}
@@ -730,7 +746,8 @@ function AuthScreen({onDemoMode}) {
                     <span style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#9aabb8",letterSpacing:"0.08em"}}>NO ACCOUNT?</span>
                     <div style={{flex:1,height:1,background:"#e8ecf0"}}/>
                   </div>
-                  <button onClick={onDemoMode} style={{background:"none",border:"1px solid #1e3448",borderRadius:7,padding:"10px",color:"#1e3448",fontSize:13,fontWeight:600,cursor:"pointer",width:"100%",fontFamily:"'DM Sans', sans-serif"}}>
+                  <ConfidentialityBox/>
+                  <button onClick={agreed?onDemoMode:null} style={{background:"none",border:"1px solid #1e3448",borderRadius:7,padding:"10px",color:agreed?"#1e3448":"#9aabb8",fontSize:13,fontWeight:600,cursor:agreed?"pointer":"not-allowed",width:"100%",fontFamily:"'DM Sans', sans-serif",opacity:agreed?1:0.5,transition:"all 0.2s"}}>
                     Explore Demo Mode
                   </button>
                 </>
