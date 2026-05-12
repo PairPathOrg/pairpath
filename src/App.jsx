@@ -498,17 +498,17 @@ const PAIRPATH_FIELDS = [
   {key:"recipient_blood_type",label:"Recipient Blood Type",required:true,types:["paired","recipient_only"]},
   {key:"recipient_year_born",label:"Recipient Year Born",required:false,types:["paired","recipient_only"]},
   {key:"recipient_pra_percent",label:"Recipient PRA %",required:false,types:["paired","recipient_only"]},
-  {key:"recipient_weight_kg",label:"Recipient Weight (kg)",required:false,types:["paired","recipient_only"]},
-  {key:"recipient_height_cm",label:"Recipient Height (cm)",required:false,types:["paired","recipient_only"]},
+  {key:"recipient_weight_kg",label:"Recipient Weight (kg)",required:true,types:["paired","recipient_only"]},
+  {key:"recipient_height_cm",label:"Recipient Height (cm)",required:true,types:["paired","recipient_only"]},
   {key:"recipient_cmv",label:"Recipient CMV",required:false,types:["paired","recipient_only"]},
   {key:"recipient_hla_notes",label:"Recipient HLA Notes",required:false,types:["paired","recipient_only"]},
-  {key:"recipient_dialysis_start",label:"Recipient Dialysis Start",required:false,types:["paired","recipient_only"]},
+  {key:"recipient_dialysis_start",label:"Recipient Waitlist Date",required:false,types:["paired","recipient_only"]},
   {key:"recipient_zip",label:"Recipient ZIP",required:false,types:["paired","recipient_only"]},
   {key:"donor_name",label:"Donor Name",required:true,types:["paired","altruistic"]},
   {key:"donor_blood_type",label:"Donor Blood Type",required:true,types:["paired","altruistic"]},
   {key:"donor_year_born",label:"Donor Year Born",required:false,types:["paired","altruistic"]},
-  {key:"donor_weight_kg",label:"Donor Weight (kg)",required:false,types:["paired","altruistic"]},
-  {key:"donor_height_cm",label:"Donor Height (cm)",required:false,types:["paired","altruistic"]},
+  {key:"donor_weight_kg",label:"Donor Weight (kg)",required:true,types:["paired","altruistic"]},
+  {key:"donor_height_cm",label:"Donor Height (cm)",required:true,types:["paired","altruistic"]},
   {key:"donor_egfr",label:"Donor eGFR",required:false,types:["paired","altruistic"]},
   {key:"donor_cmv",label:"Donor CMV",required:false,types:["paired","altruistic"]},
   {key:"donor_hla_notes",label:"Donor HLA Notes",required:false,types:["paired","altruistic"]},
@@ -1165,6 +1165,10 @@ export default function App() {
     const needsR=form.pair_type!=="altruistic",needsD=form.pair_type!=="recipient_only";
     if(needsR&&!form.recipient_name) return;
     if(needsD&&!form.donor_name) return;
+    if(needsR&&!form.recipient_weight_kg){setFlash(null);alert("Recipient weight is required.");setAdding(false);return;}
+    if(needsR&&!form.recipient_height_cm){setFlash(null);alert("Recipient height is required.");setAdding(false);return;}
+    if(needsD&&!form.donor_weight_kg){setFlash(null);alert("Donor weight is required.");setAdding(false);return;}
+    if(needsD&&!form.donor_height_cm){setFlash(null);alert("Donor height is required.");setAdding(false);return;}
     setAdding(true);
     const insertData={...form,status:form.status||"active",user_id:currentUserId,user_email:userEmail,donor_backup:form.donor_backup===true||form.donor_backup==="true"};
     NUMERIC_FIELDS.forEach(k=>{if(insertData[k]===""||insertData[k]===undefined)insertData[k]=null;});
