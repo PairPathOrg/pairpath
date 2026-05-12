@@ -896,8 +896,9 @@ export default function App() {
   const [sortStack,setSortStack]=useState([{key:"date",dir:"desc"}]);
   const [unitSystem,setUnitSystem]=useState("metric");
   const [savedMappings,setSavedMappings]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_mappings")||"{}");}catch{return {};}});
-  const [xlsxSheets,setXlsxSheets]=useState([]); // [{name, headers, preview, data, pairType}]
-  const [xlsxResults,setXlsxResults]=useState([]); // [{sheetName, imported, dupes, error}]
+  const [xlsxSheets,setXlsxSheets]=useState([]);
+  const [xlsxResults,setXlsxResults]=useState([]);
+  const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
   const [showMatchExport,setShowMatchExport]=useState(false);
   const [importHeightUnit,setImportHeightUnit]=useState("meters");
   const [importWeightUnit,setImportWeightUnit]=useState("kg"); // "metric" | "imperial"
