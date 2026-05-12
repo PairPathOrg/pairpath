@@ -2456,68 +2456,69 @@ export default function App() {
                 const rank=waitlistRank(recip);
                 const duration=waitlistDuration(recip);
                 return(
-                  <div key={recip.id} style={{...S.card,borderColor:best?`${s.text}33`:"#3a1010"}}>
-                    {/* Recipient */}
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
-                      <div>
-                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
-                          <span style={{fontSize:15,fontWeight:600,color:"#ffffff"}}>{recip.recipient_name||"Unnamed"}</span>
+                  <div key={recip.id} style={{...S.card,padding:14,borderColor:best?`${s.text}33`:"#3a1010"}}>
+                    {/* Recipient row */}
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8,gap:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginBottom:3}}>
+                          <span style={{fontSize:14,fontWeight:700,color:"#ffffff"}}>{recip.recipient_name||"Unnamed"}</span>
                           <span style={S.tag("#3d8c6e")}>{recip.recipient_blood_type}</span>
                           {pra>80&&<span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
                           {recip.urgency==="High"&&<span style={S.tag("#ff8a8a")}>URGENT</span>}
                         </div>
-                        <div style={{fontSize:12,color:"#b0bec5",display:"flex",gap:10,flexWrap:"wrap"}}>
+                        <div style={{fontSize:11,color:"#b0bec5",display:"flex",gap:8,flexWrap:"wrap"}}>
                           {rAge&&<span>Age {rAge}</span>}
                           {recip.recipient_pra_percent&&<span>PRA {recip.recipient_pra_percent}%</span>}
-                          {duration&&<span title="Time on waitlist">{duration} waiting</span>}
-                          {rank&&<span style={{color:"#6ab4d0"}}>{rank} by waitlist</span>}
+                          {duration&&<span>{duration} waiting</span>}
+                          {rank&&<span style={{color:"#6ab4d0"}}>{rank}</span>}
                         </div>
                         {flags&&flags.length>0&&(
                           <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
                             {flags.map((f,fi)=>(
-                              <span key={fi} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"#2a1500",color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>⚠ {f}</span>
+                              <span key={fi} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:"#2a1500",color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>⚠ {f}</span>
                             ))}
                           </div>
                         )}
                       </div>
                       {best&&s&&(
-                        <div style={{textAlign:"center",padding:"8px 14px",borderRadius:8,background:s.bg,flexShrink:0}}>
-                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:22,fontWeight:500,color:s.text,lineHeight:1}}>
-                            {best.result.score??<span style={{fontSize:14}}>ABO ✓</span>}
+                        <div style={{textAlign:"center",padding:"6px 12px",borderRadius:8,background:s.bg,flexShrink:0}}>
+                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:20,fontWeight:600,color:s.text,lineHeight:1}}>
+                            {best.result.score??<span style={{fontSize:13}}>ABO ✓</span>}
                           </div>
-                          <div style={{fontSize:9,color:`${s.text}99`,marginTop:2}}>PAIR SCORE</div>
+                          <div style={{fontSize:8,color:`${s.text}99`,marginTop:2,letterSpacing:"0.05em"}}>PAIR SCORE</div>
                         </div>
                       )}
                       {!best&&(
-                        <div style={{textAlign:"center",padding:"8px 14px",borderRadius:8,background:"#2a1010",flexShrink:0}}>
-                          <div style={{fontSize:13,color:"#ff8a8a"}}>No Match</div>
+                        <div style={{padding:"6px 12px",borderRadius:8,background:"#2a1010",flexShrink:0}}>
+                          <div style={{fontSize:12,color:"#ff8a8a"}}>No Match</div>
                         </div>
                       )}
                     </div>
 
-                    {/* Divider */}
-                    <div style={{borderTop:"1px solid #1e2d3d",marginBottom:10}}/>
+                    <div style={{borderTop:"1px solid #1e2d3d",marginBottom:8}}/>
 
-                    {/* Best donor */}
+                    {/* Best donor — compact single line */}
                     {best?(
                       <>
-                        <div style={{fontSize:10,color:"#4db882",fontFamily:"'DM Mono', monospace",marginBottom:6}}>BEST COMPATIBLE DONOR</div>
-                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
-                          <span style={{fontSize:14,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
+                        <div style={{fontSize:9,color:"#4db882",fontFamily:"'DM Mono', monospace",marginBottom:5,letterSpacing:"0.08em"}}>BEST COMPATIBLE DONOR</div>
+                        <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginBottom:4}}>
+                          <span style={{fontSize:13,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
                           <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
-                          {best.result.oDonorIdeal&&<span style={S.tag("#4db882")} title="O donor matched to O recipient — optimal">O→O ✓</span>}
-                          {best.result.oDonorPenalty<0&&<span style={{...S.tag("#ffd166"),fontSize:9}} title="O donor used for non-O recipient">conserve O</span>}
-                          {best.donor.donor_priority&&<span style={{...S.tag({Primary:"#2dd4a0",Secondary:"#6ab4d0",Tertiary:"#ffd166"}[best.donor.donor_priority]||"#90a4b4"),fontSize:9}}>{best.donor.donor_priority}</span>}
+                          {dAge&&<span style={{fontSize:11,color:"#90a4b4"}}>Age {dAge}</span>}
+                          {best.donor.donor_egfr&&<span style={{fontSize:11,color:"#90a4b4"}}>eGFR {best.donor.donor_egfr}</span>}
+                          {(()=>{
+                            const dw=cleanWeight(best.donor.donor_weight_kg);
+                            const rw=cleanWeight(recip.recipient_weight_kg);
+                            if(!dw||!rw) return null;
+                            const diff=Math.round(Math.abs(dw-rw)*10)/10;
+                            return <span style={{fontSize:11,color:"#90a4b4"}}>{diff}kg Δ</span>;
+                          })()}
+                          {best.result.oDonorIdeal&&<span style={{...S.tag("#4db882"),fontSize:9}}>O→O ✓</span>}
+                          {best.result.oDonorPenalty<0&&<span style={{...S.tag("#ffd166"),fontSize:9}}>conserve O</span>}
                         </div>
-                        <div style={{fontSize:12,color:"#b0bec5",marginBottom:8,display:"flex",gap:10,flexWrap:"wrap"}}>
-                          {dAge&&<span>Age {dAge}</span>}
-                          {best.donor.donor_egfr&&<span>eGFR {best.donor.donor_egfr}</span>}
-                          {best.donor.donor_weight_kg&&recip.recipient_weight_kg&&
-                            <span>{Math.abs((cleanWeight(best.donor.donor_weight_kg)||0)-(cleanWeight(recip.recipient_weight_kg)||0))}kg size diff</span>}
-                        </div>
-                        {/* Narrative */}
-                        <div style={{fontSize:12,color:"#6ab4d0",fontStyle:"italic",marginBottom:allMatches.length>1?8:0}}>
+                        <div style={{fontSize:11,color:"#6ab4d0",marginBottom:allMatches.length>1?6:0}}>
                           {matchNarrative({recip,best,waitlistDays})}
+                        </div>
                         </div>
                         {/* Other compatible donors */}
                         {allMatches.length>1&&(
