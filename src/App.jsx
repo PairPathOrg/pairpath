@@ -81,6 +81,17 @@ function calculateCompatibility(donor, recipient) {
   // PRA: high PRA recipient successfully matched = clinical win, award points
   const praPoints = highPRA ? 25 : moderatePRA ? 18 : 15;
 
+  // O donor optimization:
+  // O donors are universal but scarce — preserve them for O recipients who have no other options.
+  // O→O: bonus (+5) — ideal use of an O donor
+  // O→AB: penalty (-8) — AB recipients can receive from anyone, wasteful use of O donor
+  // O→A or O→B: slight penalty (-3) — A/B recipients have other options (A→A, B→B etc.)
+  // ⚠ TODO: revisit with transplant professionals — some programs use O donors freely
+  const dBlood = donor.donor_blood_type;
+  const rBlood = recipient.recipient_blood_type;
+  const oDonorBonus  = dBlood==="O"&&rBlood==="O" ?  5 : 0;
+  const oDonorPenalty= dBlood==="O"&&rBlood==="AB" ? -8 : dBlood==="O"&&(rBlood==="A"||rBlood==="B") ? -3 : 0;
+
   // Modifiers (deductions only)
   const cmvPenalty  = cmvRisk  ?  8 : 0;
   const sizePenalty = sizeOk   ?  0 : 4;
@@ -88,14 +99,16 @@ function calculateCompatibility(donor, recipient) {
   const bmiPenalty  = bmiFlag  ?  2 : 0;
 
   const score = Math.min(100, Math.max(0,
-    hlaPoints + praPoints - cmvPenalty - sizePenalty - agePenalty - bmiPenalty
+    hlaPoints + praPoints + oDonorBonus + oDonorPenalty - cmvPenalty - sizePenalty - agePenalty - bmiPenalty
   ));
 
   return {
     compatible: hlaMismatches <= 4,
     score,
     aboOnly: false,
-    reasons: { abo: true, hlaMismatches, highSensitization: highPRA, moderatePRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
+    oDonorOptimized: dBlood==="O",
+    oDonorIdeal: dBlood==="O"&&rBlood==="O",
+    reasons: { abo: true, hlaMismatches, highSensitization: highPRA, moderatePRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra, oDonorBonus, oDonorPenalty }
   };
 }
 
@@ -308,7 +321,7 @@ function exportMatchCards(pairs) {
       :"—";
     const pra=parseFloat(recip.recipient_pra_percent||0);
     const weightDiff=best&&best.donor.donor_weight_kg&&recip.recipient_weight_kg
-      ?Math.round(Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg))):null;
+      ?Math.abs((cleanWeight(best.donor.donor_weight_kg)||0)-(cleanWeight(recip.recipient_weight_kg)||0)):null;
     const score=best?.result.score;
     const scoreColor=score>=75?"#0a6e40":score>=55?"#1a5a1a":score>=35?"#6b4a00":"#6e0d0d";
     const scoreLabel=score>=75?"Strong":score>=55?"Good":score>=35?"Marginal":score!=null?"Poor":"ABO only";
@@ -321,7 +334,7 @@ function exportMatchCards(pairs) {
             <div style="font-size:12px;color:#555;display:flex;gap:12px;flex-wrap:wrap">
               ${recip.recipient_pra_percent?`<span>PRA ${recip.recipient_pra_percent}%${pra>80?" ⚠":""}` :"<span>PRA —"}  </span>
               <span>Waitlist: ${waitlistStr}</span>
-              ${recip.recipient_weight_kg?`<span>Weight: ${recip.recipient_weight_kg}kg</span>`:""}
+              ${recip.recipient_weight_kg?`<span>Weight: ${cleanWeight(recip.recipient_weight_kg)}kg</span>`:""}
             </div>
           </div>
           ${best?`<div style="text-align:center;padding:8px 16px;border-radius:6px;background:${scoreColor}22;border:1px solid ${scoreColor}44">
@@ -556,7 +569,13 @@ function autoDetect(headers, pairType="paired") {
   return mapping;
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────
+// ── Weight display helper — always rounds to 1 decimal, handles floating point artifacts ──
+function cleanWeight(v) {
+  if(!v&&v!==0) return null;
+  const n=parseFloat(String(v).replace(/[^\d.]/g,""));
+  if(isNaN(n)||n<=0||n>400) return null;
+  return Math.round(n*10)/10;
+}
 const S = {
   app: {minHeight:"100vh",background:"#131c26",color:"#ffffff",fontFamily:"'DM Sans', sans-serif",fontSize:14},
   header: {borderBottom:"1px solid #1e2d3d",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,background:"#0a0f18",gap:12},
@@ -2356,7 +2375,7 @@ export default function App() {
             const flags=[];
             if(best){
               if(best.donor.donor_cmv==="Positive"&&recip.recipient_cmv==="Negative") flags.push("CMV D+/R−");
-              const dw=parseFloat(best.donor.donor_weight_kg||0),rw=parseFloat(recip.recipient_weight_kg||0);
+              const dw=cleanWeight(best.donor.donor_weight_kg)||0, rw=cleanWeight(recip.recipient_weight_kg)||0;
               if(dw&&rw&&Math.abs(dw-rw)>20) flags.push("Size gap");
               if(parseFloat(recip.recipient_pra_percent||0)>80) flags.push("High PRA");
             }
@@ -2381,7 +2400,7 @@ export default function App() {
           if(!best) return "No compatible donor found in current registry.";
           const pra=parseFloat(recip.recipient_pra_percent||0);
           const weightDiff=best.donor.donor_weight_kg&&recip.recipient_weight_kg
-            ?Math.round(Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg))):null;
+            ?Math.abs((cleanWeight(best.donor.donor_weight_kg)||0)-(cleanWeight(recip.recipient_weight_kg)||0)):null;
           const ageDiff=best.result.reasons.ageDiff;
           const parts=[];
           if(pra>80) parts.push("Highly sensitized — rare compatible match");
@@ -2486,13 +2505,15 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
                           <span style={{fontSize:14,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
                           <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
+                          {best.result.oDonorIdeal&&<span style={S.tag("#4db882")} title="O donor matched to O recipient — optimal">O→O ✓</span>}
+                          {best.result.oDonorPenalty<0&&<span style={{...S.tag("#ffd166"),fontSize:9}} title="O donor used for non-O recipient">conserve O</span>}
                           {best.donor.donor_priority&&<span style={{...S.tag({Primary:"#2dd4a0",Secondary:"#6ab4d0",Tertiary:"#ffd166"}[best.donor.donor_priority]||"#90a4b4"),fontSize:9}}>{best.donor.donor_priority}</span>}
                         </div>
                         <div style={{fontSize:12,color:"#b0bec5",marginBottom:8,display:"flex",gap:10,flexWrap:"wrap"}}>
                           {dAge&&<span>Age {dAge}</span>}
                           {best.donor.donor_egfr&&<span>eGFR {best.donor.donor_egfr}</span>}
                           {best.donor.donor_weight_kg&&recip.recipient_weight_kg&&
-                            <span>{Math.round(Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg)))}kg size diff</span>}
+                            <span>{Math.abs((cleanWeight(best.donor.donor_weight_kg)||0)-(cleanWeight(recip.recipient_weight_kg)||0))}kg size diff</span>}
                         </div>
                         {/* Narrative */}
                         <div style={{fontSize:12,color:"#6ab4d0",fontStyle:"italic",marginBottom:allMatches.length>1?8:0}}>
