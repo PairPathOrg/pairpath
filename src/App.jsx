@@ -992,6 +992,12 @@ export default function App() {
   if(authLoading) return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
   if(!session&&!demoMode) return <AuthScreen onDemoMode={()=>setDemoMode(true)}/>;
 
+  // Safety guard — if session exists but user data is malformed
+  if(session&&!session.user) {
+    supabase.auth.signOut();
+    return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#ff8a8a",fontFamily:"'DM Mono', monospace",fontSize:13}}>Session error — please sign in again</div>;
+  }
+
   const currentUserId=session?.user?.id||"demo";
   const userMeta=session?.user?.user_metadata||{};
   const isAdmin=userMeta.role==="admin";
