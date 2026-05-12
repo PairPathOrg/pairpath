@@ -373,7 +373,7 @@ function exportRegistry(pairs) {
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_export.csv"; a.click();
 }
 
-function exportMatches(pairs) {
+function exportMatches(pairs, level="standard") {
   const donors    = pairs.filter(p=>p.donor_blood_type&&p.status!=="inactive");
   const recipients= pairs.filter(p=>p.recipient_blood_type&&p.status!=="inactive");
   const rows = [];
@@ -382,32 +382,49 @@ function exportMatches(pairs) {
       if(donor.id===recipient.id) return;
       const result = calculateCompatibility(donor, recipient);
       if(!result.reasons.abo) return;
+      const cleanWt = v => { const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,""))); return (!isNaN(n)&&n>0&&n<400)?n:""; };
+      const donorWt  = cleanWt(donor.donor_weight_kg);
+      const recipWt  = cleanWt(recipient.recipient_weight_kg);
       const waitlist = recipient.recipient_dialysis_start
-        ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"})
-        : "";
-      const donorWt  = donor.donor_weight_kg    ? Math.round(parseFloat(donor.donor_weight_kg))    : "";
-      const recipWt  = recipient.recipient_weight_kg ? Math.round(parseFloat(recipient.recipient_weight_kg)) : "";
-      const weightDelta = donorWt && recipWt ? Math.abs(donorWt - recipWt) : "";
+        ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
       rows.push({
-        donor:          donor.donor_name    || donor.id,
-        donor_blood:    donor.donor_blood_type,
-        recipient:      recipient.recipient_name || recipient.id,
-        recipient_blood:recipient.recipient_blood_type,
-        pra:            recipient.recipient_pra_percent ?? "",
-        waitlist_date:  waitlist,
-        donor_weight:   donorWt,
-        recipient_weight: recipWt,
-        weight_gap_kg:  weightDelta,
-        pair_score:     result.score ?? "ABO only",
-        donor_priority: donor.donor_priority || "",
+        pair_score:      result.score ?? "ABO only",
+        recipient:       recipient.recipient_name || recipient.id,
+        recipient_blood: recipient.recipient_blood_type,
+        recipient_age:   calcAge(recipient.recipient_year_born)||"",
+        pra:             recipient.recipient_pra_percent ?? "",
+        waitlist_date:   waitlist,
+        recipient_weight:recipWt,
+        donor:           donor.donor_name || donor.id,
+        donor_blood:     donor.donor_blood_type,
+        donor_age:       calcAge(donor.donor_year_born)||"",
+        donor_weight:    donorWt,
+        weight_gap_kg:   donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
+        // Full clinical fields
+        donor_egfr:      donor.donor_egfr||"",
+        donor_cmv:       donor.donor_cmv||"",
+        recipient_cmv:   recipient.recipient_cmv||"",
+        urgency:         recipient.urgency||"",
+        hla_notes:       recipient.recipient_hla_notes||donor.donor_hla_notes||"",
       });
     });
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
-  const header = "Pair Score,Recipient,Recipient Blood Type,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Donor,Donor Blood Type,Donor Weight (kg),Weight Gap (kg)";
-  const lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.waitlist_date,r.recipient_weight,r.donor,r.donor_blood,r.donor_weight,r.weight_gap_kg].join(","));
+
+  let header, lines;
+  if(level==="quick"){
+    header = "Pair Score,Recipient,Recipient Blood Type,Recipient PRA %,Donor,Donor Blood Type";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.donor,r.donor_blood].join(","));
+  } else if(level==="full"){
+    header = "Pair Score,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Recipient CMV,Urgency,Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Donor eGFR,Donor CMV,Weight Gap (kg),HLA Notes";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.recipient_weight,r.recipient_cmv,r.urgency,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.hla_notes].join(","));
+  } else {
+    // standard
+    header = "Pair Score,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Weight Gap (kg)";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.recipient_weight,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.weight_gap_kg].join(","));
+  }
   const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
-  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_matches_${level}.csv`; a.click();
 }
 
 function parseCSV(text, userId) {
@@ -881,7 +898,7 @@ export default function App() {
   const [savedMappings,setSavedMappings]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_mappings")||"{}");}catch{return {};}});
   const [xlsxSheets,setXlsxSheets]=useState([]); // [{name, headers, preview, data, pairType}]
   const [xlsxResults,setXlsxResults]=useState([]); // [{sheetName, imported, dupes, error}]
-  const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
+  const [showMatchExport,setShowMatchExport]=useState(false);
   const [importHeightUnit,setImportHeightUnit]=useState("meters");
   const [importWeightUnit,setImportWeightUnit]=useState("kg"); // "metric" | "imperial"
   const [editingPair,setEditingPair]=useState(null);
@@ -1056,13 +1073,13 @@ export default function App() {
       const rName=(p.recipient_name||"").trim().toLowerCase();
       const fDName=(f.donor_name||"").trim().toLowerCase();
       const fRName=(f.recipient_name||"").trim().toLowerCase();
-      // Altruistic: duplicate if same donor name
-      if(f.pair_type==="altruistic") return dName&&dName===fDName;
-      // Recipient only: duplicate if same recipient name
-      if(f.pair_type==="recipient_only") return rName&&rName===fRName;
-      // Paired: duplicate only if BOTH donor AND recipient name match
-      // Same recipient + different donor = allowed (multiple donors per recipient)
-      return dName&&rName&&dName===fDName&&rName===fRName;
+      // If birth years are both present and different — definitely not the same person
+      const donorYearMismatch=p.donor_year_born&&f.donor_year_born&&String(p.donor_year_born)!==String(f.donor_year_born);
+      const recipYearMismatch=p.recipient_year_born&&f.recipient_year_born&&String(p.recipient_year_born)!==String(f.recipient_year_born);
+      if(f.pair_type==="altruistic") return dName&&dName===fDName&&!donorYearMismatch;
+      if(f.pair_type==="recipient_only") return rName&&rName===fRName&&!recipYearMismatch;
+      // Paired: both names must match AND neither birth year can conflict
+      return dName&&rName&&dName===fDName&&rName===fRName&&!donorYearMismatch&&!recipYearMismatch;
     });
   }
 
@@ -1227,26 +1244,28 @@ export default function App() {
     // Validate CMV
     if(!["Positive","Negative","Unknown"].includes(obj.donor_cmv)) obj.donor_cmv="Unknown";
     if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv)) obj.recipient_cmv="Unknown";
-    // Parse year from full DOB dates MM/DD/YYYY
-    if(obj.recipient_year_born?.includes("/")) { const p=obj.recipient_year_born.split("/"); obj.recipient_year_born=p[2]?.length===4?p[2]:`20${p[2]}`; }
-    if(obj.donor_year_born?.includes("/")) { const p=obj.donor_year_born.split("/"); obj.donor_year_born=p[2]?.length===4?p[2]:`20${p[2]}`; }
-    // Parse year from YYYY-MM-DD format
-    if(obj.recipient_year_born?.includes("-")) obj.recipient_year_born=obj.recipient_year_born.split("-")[0];
-    if(obj.donor_year_born?.includes("-")) obj.donor_year_born=obj.donor_year_born.split("-")[0];
-    // Convert Excel serial date numbers to ISO date string (e.g. 45950 → 2025-10-25)
+    // Convert Excel serial date numbers — applies to ALL date fields
     function excelSerialToISO(val){
-      if(!val) return val;
+      if(!val&&val!==0) return val;
       const n=parseFloat(String(val).trim());
       if(!isNaN(n)&&n>40000&&n<60000){
-        // Excel serial: days since 1900-01-01 (with Lotus 1-2-3 leap year bug offset)
         const date=new Date((n-25569)*86400000);
-        return date.toISOString().split("T")[0];
+        return date.toISOString().split("T")[0]; // YYYY-MM-DD
       }
       return val;
     }
+    function extractYear(val){
+      if(!val) return val;
+      const converted=excelSerialToISO(val); // handle serial first
+      const s=String(converted).trim();
+      if(s.includes("-")) return s.split("-")[0]; // YYYY-MM-DD → YYYY
+      if(s.includes("/")){ const p=s.split("/"); return p[2]?.length===4?p[2]:`20${p[2]}`; } // MM/DD/YYYY → YYYY
+      if(/^\d{4}$/.test(s)) return s; // already a year
+      return s;
+    }
     obj.recipient_dialysis_start=excelSerialToISO(obj.recipient_dialysis_start);
-    obj.recipient_year_born=obj.recipient_year_born?String(obj.recipient_year_born).split("-")[0].split("/").pop():obj.recipient_year_born;
-    obj.donor_year_born=obj.donor_year_born?String(obj.donor_year_born).split("-")[0].split("/").pop():obj.donor_year_born;
+    obj.recipient_year_born=extractYear(obj.recipient_year_born);
+    obj.donor_year_born=extractYear(obj.donor_year_born);
     return obj;
   }
 
@@ -1525,6 +1544,29 @@ export default function App() {
         </div>
       )}
 
+      {/* Export Matches Detail Level Modal */}
+      {showMatchExport&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{...S.card,maxWidth:480,width:"90%"}}>
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>Export Matches</div>
+            <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by Pair Score.</p>
+            {[
+              {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · PRA%","cols":"6 columns — for a fast first look in a meeting"},
+              {level:"standard",label:"Standard",desc:"+ Age · Waitlist Date · Weights · Weight Gap","cols":"12 columns — recommended for most presentations"},
+              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · Urgency · HLA Notes","cols":"17 columns — for detailed clinical review"},
+            ].map(({level,label,desc,cols})=>(
+              <button key={level} onClick={()=>{exportMatches(visiblePairs,level);setShowMatchExport(false);}}
+                style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
+                <div style={{fontSize:14,fontWeight:600,color:"#ffffff",marginBottom:3}}>{label}</div>
+                <div style={{fontSize:12,color:"#6ab4d0",marginBottom:3}}>{desc}</div>
+                <div style={{fontSize:11,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>{cols}</div>
+              </button>
+            ))}
+            <button onClick={()=>setShowMatchExport(false)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",width:"100%",marginTop:4}}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       {/* Duplicate Warning Modal */}
       {duplicateWarning&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
@@ -1745,7 +1787,7 @@ export default function App() {
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
               </label>
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Export CSV</button>
-              <button onClick={()=>exportMatches(visiblePairs)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}} title="Export all compatible donor-recipient matches as a clean two-column list — ideal for anonymized data">Export Matches</button>
+              <button onClick={()=>setShowMatchExport(true)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
           </div>
 
