@@ -308,7 +308,7 @@ function exportMatchCards(pairs) {
       :"—";
     const pra=parseFloat(recip.recipient_pra_percent||0);
     const weightDiff=best&&best.donor.donor_weight_kg&&recip.recipient_weight_kg
-      ?Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg)):null;
+      ?Math.round(Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg))):null;
     const score=best?.result.score;
     const scoreColor=score>=75?"#0a6e40":score>=55?"#1a5a1a":score>=35?"#6b4a00":"#6e0d0d";
     const scoreLabel=score>=75?"Strong":score>=55?"Good":score>=35?"Marginal":score!=null?"Poor":"ABO only";
@@ -934,7 +934,8 @@ export default function App() {
   const [xlsxResults,setXlsxResults]=useState([]);
   const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
   const [showMatchExport,setShowMatchExport]=useState(false);
-  const [nameWarning,setNameWarning]=useState(null); // {flaggedNames, pendingData, pairType}
+  const [nameWarning,setNameWarning]=useState(null);
+  const [whatIfDonor,setWhatIfDonor]=useState(null);
   const [importHeightUnit,setImportHeightUnit]=useState("meters");
   const [importWeightUnit,setImportWeightUnit]=useState("kg"); // "metric" | "imperial"
   const [editingPair,setEditingPair]=useState(null);
@@ -2369,7 +2370,6 @@ export default function App() {
           });
         }
 
-        const [whatIfDonor,setWhatIfDonor]=useState(null);
         const recipientMatches=buildMatches(whatIfDonor);
         const noMatchCount = recipientMatches.filter(m=>!m.best).length;
         const affectedByWithdrawal = whatIfDonor
@@ -2381,15 +2381,13 @@ export default function App() {
           if(!best) return "No compatible donor found in current registry.";
           const pra=parseFloat(recip.recipient_pra_percent||0);
           const weightDiff=best.donor.donor_weight_kg&&recip.recipient_weight_kg
-            ?Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg)):null;
+            ?Math.round(Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg))):null;
           const ageDiff=best.result.reasons.ageDiff;
           const parts=[];
           if(pra>80) parts.push("Highly sensitized — rare compatible match");
           else if(pra>50) parts.push("Moderately sensitized");
           if(waitlistDays&&waitlistDays>365) parts.push(`${Math.floor(waitlistDays/365)}yr ${Math.floor((waitlistDays%365)/30)}mo on waitlist`);
           else if(waitlistDays) parts.push(`${waitlistDays} days on waitlist`);
-          if(weightDiff!==null) parts.push(`${weightDiff}kg size difference`);
-          if(ageDiff) parts.push(`${ageDiff}yr age gap`);
           if(best.result.aboOnly) parts.push("ABO compatible — HLA not yet entered");
           return parts.join(" · ")||"ABO compatible match";
         }
@@ -2494,7 +2492,7 @@ export default function App() {
                           {dAge&&<span>Age {dAge}</span>}
                           {best.donor.donor_egfr&&<span>eGFR {best.donor.donor_egfr}</span>}
                           {best.donor.donor_weight_kg&&recip.recipient_weight_kg&&
-                            <span>{Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg))}kg size diff</span>}
+                            <span>{Math.round(Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg)))}kg size diff</span>}
                         </div>
                         {/* Narrative */}
                         <div style={{fontSize:12,color:"#6ab4d0",fontStyle:"italic",marginBottom:allMatches.length>1?8:0}}>
