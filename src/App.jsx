@@ -376,6 +376,27 @@ function exportRegistry(pairs) {
 function exportMatches(pairs, level="standard") {
   const donors    = pairs.filter(p=>p.donor_blood_type&&p.status!=="inactive");
   const recipients= pairs.filter(p=>p.recipient_blood_type&&p.status!=="inactive");
+
+  // Pre-compute waitlist rank across all recipients with a waitlist date
+  const recipientsWithWaitlist = recipients
+    .filter(p=>p.recipient_dialysis_start)
+    .sort((a,b)=>new Date(a.recipient_dialysis_start)-new Date(b.recipient_dialysis_start));
+
+  function waitlistDays(r){
+    if(!r.recipient_dialysis_start) return null;
+    return Math.floor((Date.now()-new Date(r.recipient_dialysis_start))/86400000);
+  }
+  function waitlistStr(r){
+    const d=waitlistDays(r);
+    if(!d) return "";
+    if(d>365) return `${Math.floor(d/365)}yr ${Math.floor((d%365)/30)}mo`;
+    return `${d} days`;
+  }
+  function waitlistRank(r){
+    const idx=recipientsWithWaitlist.findIndex(p=>p.id===r.id);
+    return idx>=0?`#${idx+1} of ${recipientsWithWaitlist.length}`:""
+  }
+
   const rows = [];
   donors.forEach(donor=>{
     recipients.forEach(recipient=>{
@@ -387,25 +408,33 @@ function exportMatches(pairs, level="standard") {
       const recipWt  = cleanWt(recipient.recipient_weight_kg);
       const waitlist = recipient.recipient_dialysis_start
         ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
+
+      // CMV confidence flag
+      const cmvFlag = donor.donor_cmv==="Positive"&&recipient.recipient_cmv==="Negative"?"⚠ CMV D+/R-":"";
+      const sizeFlag = donorWt&&recipWt&&Math.abs(donorWt-recipWt)>20?"⚠ Size gap":"";
+      const flags=[cmvFlag,sizeFlag].filter(Boolean).join("; ")||"None";
+
       rows.push({
-        pair_score:      result.score ?? "ABO only",
-        recipient:       recipient.recipient_name || recipient.id,
-        recipient_blood: recipient.recipient_blood_type,
-        recipient_age:   calcAge(recipient.recipient_year_born)||"",
-        pra:             recipient.recipient_pra_percent ?? "",
-        waitlist_date:   waitlist,
-        recipient_weight:recipWt,
-        donor:           donor.donor_name || donor.id,
-        donor_blood:     donor.donor_blood_type,
-        donor_age:       calcAge(donor.donor_year_born)||"",
-        donor_weight:    donorWt,
-        weight_gap_kg:   donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
-        // Full clinical fields
-        donor_egfr:      donor.donor_egfr||"",
-        donor_cmv:       donor.donor_cmv||"",
-        recipient_cmv:   recipient.recipient_cmv||"",
-        urgency:         recipient.urgency||"",
-        hla_notes:       recipient.recipient_hla_notes||donor.donor_hla_notes||"",
+        pair_score:       result.score ?? "ABO only",
+        recipient:        recipient.recipient_name || recipient.id,
+        recipient_blood:  recipient.recipient_blood_type,
+        recipient_age:    calcAge(recipient.recipient_year_born)||"",
+        pra:              recipient.recipient_pra_percent ?? "",
+        waitlist_date:    waitlist,
+        waitlist_duration:waitlistStr(recipient),
+        waitlist_rank:    waitlistRank(recipient),
+        recipient_weight: recipWt,
+        donor:            donor.donor_name || donor.id,
+        donor_blood:      donor.donor_blood_type,
+        donor_age:        calcAge(donor.donor_year_born)||"",
+        donor_weight:     donorWt,
+        weight_gap_kg:    donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
+        flags,
+        donor_egfr:       donor.donor_egfr||"",
+        donor_cmv:        donor.donor_cmv||"",
+        recipient_cmv:    recipient.recipient_cmv||"",
+        urgency:          recipient.urgency||"",
+        hla_notes:        recipient.recipient_hla_notes||donor.donor_hla_notes||"",
       });
     });
   });
@@ -413,17 +442,22 @@ function exportMatches(pairs, level="standard") {
 
   let header, lines;
   if(level==="quick"){
-    header = "Pair Score,Recipient,Recipient Blood Type,Recipient PRA %,Donor,Donor Blood Type";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.donor,r.donor_blood].join(","));
+    header = "Pair Score,Recipient,Blood Type,PRA %,Waitlist Duration,Waitlist Rank,Donor,Blood Type,Flags";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.waitlist_duration,r.waitlist_rank,r.donor,r.donor_blood,r.flags].join(","));
   } else if(level==="full"){
-    header = "Pair Score,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Recipient CMV,Urgency,Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Donor eGFR,Donor CMV,Weight Gap (kg),HLA Notes";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.recipient_weight,r.recipient_cmv,r.urgency,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.hla_notes].join(","));
+    header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Date,Waitlist Duration,Waitlist Rank,Weight (kg),CMV,Urgency,Donor,Blood Type,Age,Weight (kg),eGFR,CMV,Weight Gap (kg),Flags,HLA Notes";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.recipient_cmv,r.urgency,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.flags,r.hla_notes].join(","));
   } else {
-    // standard
-    header = "Pair Score,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Weight Gap (kg)";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.recipient_weight,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.weight_gap_kg].join(","));
+    header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Duration,Waitlist Rank,Weight (kg),Donor,Blood Type,Age,Weight (kg),Weight Gap (kg),Flags";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.weight_gap_kg,r.flags].join(","));
   }
-  const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
+  const disclaimer = [
+    `PairPath Match Export — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
+    `Pair Score (0-100): ABO compatibility required. HLA mismatches drive 60% of score (0MM=best). High PRA recipients score higher when matched — hardest to find, greatest clinical value. Size >20kg gap and CMV D+/R- flagged. Waitlist rank = position among recipients with known waitlist dates in this registry.`,
+    `Flags column: clinical risk factors worth discussing before crossmatch. All scores are computational screens — not clinically validated. All matches require crossmatch confirmation.`,
+    ``,
+  ].map(r=>`"${r}"`).join("\n");
+  const blob = new Blob([[disclaimer,header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_matches_${level}.csv`; a.click();
 }
 
@@ -900,6 +934,7 @@ export default function App() {
   const [xlsxResults,setXlsxResults]=useState([]);
   const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
   const [showMatchExport,setShowMatchExport]=useState(false);
+  const [nameWarning,setNameWarning]=useState(null); // {flaggedNames, pendingData, pairType}
   const [importHeightUnit,setImportHeightUnit]=useState("meters");
   const [importWeightUnit,setImportWeightUnit]=useState("kg"); // "metric" | "imperial"
   const [editingPair,setEditingPair]=useState(null);
@@ -1205,16 +1240,79 @@ export default function App() {
     setUploading(false);
   }
 
+  // ── Name Detection ─────────────────────────────────────────────────────────
+  function looksLikeRealName(val){
+    if(!val) return false;
+    const s=String(val).trim();
+    if(s.length<3) return false;
+    if(/\d/.test(s)) return false; // has numbers — likely an ID
+    if(/^[A-Z]{1,3}\d+$/i.test(s)) return false; // D1, R23, PT001 pattern
+    if(/[-_]/g.test(s)&&/\d/.test(s)) return false; // ID-001 style
+    // Looks like a name if: contains a space, or is title case word >4 chars
+    const hasSpace=/\s/.test(s);
+    const isTitleCase=/^[A-Z][a-z]{3,}/.test(s);
+    return hasSpace||isTitleCase;
+  }
+
+  function detectRealNames(headers, rows, nameFields=["donor_name","recipient_name"]){
+    const flagged=new Set();
+    rows.forEach(row=>{
+      headers.forEach((h,i)=>{
+        const val=Array.isArray(row)?row[i]:row[h];
+        if(looksLikeRealName(val)) flagged.add(String(val).trim());
+      });
+    });
+    return [...flagged];
+  }
+
+  function autoAnonymize(headers, rows, pairType){
+    // Assign D1/D2/R1/R2 IDs, build lookup table
+    const donorNames=new Map(), recipNames=new Map();
+    let dCount=1, rCount=1;
+    const anonymized=rows.map(row=>{
+      const newRow=Array.isArray(row)?[...row]:{...row};
+      const getName=(field)=>Array.isArray(row)?row[headers.indexOf(field)]:row[field];
+      const setName=(field,val)=>{if(Array.isArray(newRow)){const i=headers.indexOf(field);if(i>=0)newRow[i]=val;}else newRow[field]=val;};
+      const dName=getName("donor_name")||getName(headers.find(h=>h.toLowerCase().includes("donor")&&h.toLowerCase().includes("name"))||"");
+      const rName=getName("recipient_name")||getName(headers.find(h=>h.toLowerCase().includes("recipient")&&h.toLowerCase().includes("name"))||"");
+      if(dName&&looksLikeRealName(dName)){
+        if(!donorNames.has(dName)) donorNames.set(dName,`D${dCount++}`);
+        setName("donor_name",donorNames.get(dName));
+      }
+      if(rName&&looksLikeRealName(rName)){
+        if(!recipNames.has(rName)) recipNames.set(rName,`R${rCount++}`);
+        setName("recipient_name",recipNames.get(rName));
+      }
+      return newRow;
+    });
+    // Generate lookup CSV
+    const lookupLines=["ID,Full Name,Role"];
+    donorNames.forEach((id,name)=>lookupLines.push(`${id},"${name}",Donor`));
+    recipNames.forEach((id,name)=>lookupLines.push(`${id},"${name}",Recipient`));
+    const blob=new Blob([lookupLines.join("\n")],{type:"text/csv"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="PairPath_ID_Lookup.csv";a.click();
+    return anonymized;
+  }
+
   async function processFileWithType(pairType){
     const file=pendingFile.current;if(!file) return;
     setShowUploadTypeSelect(false);setUploading(true);
     const text=await file.text();
     const[headerLine,...rows]=text.trim().split("\n");
     const headers=headerLine.split(",").map(h=>h.trim());
-    const preview=rows.slice(0,3).map(row=>{
-      const vals=row.split(",").map(v=>v.trim());
-      const obj={};headers.forEach((h,i)=>{obj[h]=vals[i]||"";});return obj;
+    const dataRows=rows.filter(r=>r.trim()).map(row=>row.split(",").map(v=>v.trim().replace(/^"|"$/g,"")));
+    const preview=dataRows.slice(0,3).map(row=>{
+      const obj={};headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;
     });
+
+    // Name detection — check before showing mapper
+    const flagged=detectRealNames(headers,dataRows);
+    if(flagged.length>0){
+      setNameWarning({flagged,headers,dataRows,preview,text,pairType});
+      setUploading(false);
+      return;
+    }
+
     setCsvMapper({headers,pairType,preview,text});
     setUploadPairType(pairType);
     setUploading(false);
@@ -1574,6 +1672,48 @@ export default function App() {
         </div>
       )}
 
+      {/* Name Detection Warning Modal */}
+      {nameWarning&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+          <div style={{...S.card,maxWidth:520,width:"100%"}}>
+            <div style={{fontSize:22,marginBottom:8}}>⚠️ Possible Real Names Detected</div>
+            <p style={{fontSize:13,color:"#b0bec5",marginBottom:12,lineHeight:1.6}}>
+              PairPath found values that look like real patient names. To protect patient privacy, all data must be de-identified before upload.
+            </p>
+            <div style={{background:"#1a1010",border:"1px solid #3a1010",borderRadius:8,padding:"10px 14px",marginBottom:16,maxHeight:140,overflowY:"auto"}}>
+              <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#ff8a8a",letterSpacing:"0.08em",marginBottom:6}}>FLAGGED VALUES ({nameWarning.flagged.length})</div>
+              {nameWarning.flagged.map((n,i)=>(
+                <div key={i} style={{fontSize:12,color:"#ffb0b0",marginBottom:3}}>• {n}</div>
+              ))}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <button onClick={()=>{
+                const anonymized=autoAnonymize(nameWarning.headers,nameWarning.dataRows,nameWarning.pairType);
+                // Rebuild text with anonymized data
+                const newText=[nameWarning.headers.join(","),...anonymized.map(r=>r.join(","))].join("\n");
+                const preview=anonymized.slice(0,3).map(row=>{const obj={};nameWarning.headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;});
+                setCsvMapper({headers:nameWarning.headers,pairType:nameWarning.pairType,preview,text:newText});
+                setUploadPairType(nameWarning.pairType);
+                setNameWarning(null);
+              }} style={{...S.btn,background:"#1a6b45",color:"#ffffff",textAlign:"left",padding:"14px 16px"}}>
+                <div style={{fontWeight:700,marginBottom:2}}>Auto-Anonymize + Download Lookup Table</div>
+                <div style={{fontSize:12,fontWeight:400,opacity:0.8}}>Replaces names with D1/R1 IDs. Downloads a lookup CSV so you can re-identify after export.</div>
+              </button>
+              <button onClick={()=>{
+                const preview=nameWarning.dataRows.slice(0,3).map(row=>{const obj={};nameWarning.headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;});
+                setCsvMapper({headers:nameWarning.headers,pairType:nameWarning.pairType,preview,text:nameWarning.text});
+                setUploadPairType(nameWarning.pairType);
+                setNameWarning(null);
+              }} style={{...S.btn,background:"#2a1500",border:"1px solid #6b3a00",color:"#ffd166",textAlign:"left",padding:"14px 16px"}}>
+                <div style={{fontWeight:700,marginBottom:2}}>Proceed Anyway</div>
+                <div style={{fontSize:12,fontWeight:400,opacity:0.8}}>I confirm this data is already de-identified and these are not real patient names.</div>
+              </button>
+              <button onClick={()=>setNameWarning(null)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Cancel Upload</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Duplicate Warning Modal */}
       {duplicateWarning&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
@@ -1782,7 +1922,45 @@ export default function App() {
       {/* Registry */}
       {view==="registry"&&(
         <div style={S.page}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
+          {/* Onboarding — shown only when registry is empty */}
+          {pairs.length===0&&!demoMode&&(
+            <div style={{maxWidth:560,margin:"0 auto",textAlign:"center",padding:"48px 24px"}}>
+              <div style={{fontSize:48,marginBottom:16}}>🏥</div>
+              <h1 style={{...S.pageTitle,textAlign:"center",marginBottom:8}}>Welcome to PairPath</h1>
+              <p style={{color:"#b0bec5",fontSize:15,lineHeight:1.7,marginBottom:32}}>
+                Your registry is empty. Start by uploading your active donors and recipients from Epic, or add pairs manually one at a time.
+              </p>
+              <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:32}}>
+                <button onClick={()=>fileRef.current?.click()} style={{...S.btn,background:"#1a6b45",color:"#ffffff",padding:"14px 20px",fontSize:15}}>
+                  ↑ Bulk Upload from Epic (CSV or Excel)
+                </button>
+                <button onClick={()=>{setView("add");setForm(emptyForm);}} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",padding:"14px 20px",fontSize:15}}>
+                  + Add a Single Entry Manually
+                </button>
+                <button onClick={()=>setDemoMode(true)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#6a8090",padding:"14px 20px",fontSize:14}}>
+                  Explore with Demo Data First
+                </button>
+              </div>
+              <div style={{padding:"16px 20px",borderRadius:10,background:"#131c26",border:"1px solid #1e2d3d",textAlign:"left"}}>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a8090",letterSpacing:"0.08em",marginBottom:10}}>QUICK START</div>
+                {[
+                  ["1","Export Active Status 1 recipients from Epic as CSV"],
+                  ["2","Export Active Living Donors in Evaluation from Epic as CSV"],
+                  ["3","Click Bulk Upload — PairPath detects and anonymizes real names automatically"],
+                  ["4","Map your columns — PairPath remembers your mapping for next time"],
+                  ["5","Go to Matches to see your best compatible pairs instantly"],
+                ].map(([n,s])=>(
+                  <div key={n} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
+                    <span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#1a6b45",fontWeight:700,flexShrink:0}}>{n}.</span>
+                    <span style={{fontSize:13,color:"#b0bec5",lineHeight:1.5}}>{s}</span>
+                  </div>
+                ))}
+              </div>
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
+            </div>
+          )}
+          {(pairs.length>0||demoMode)&&(
+          <>
             <div>
               <h1 style={S.pageTitle}>Registry</h1>
               <p style={{...S.subtitle,marginBottom:0}}>All entries — manage, edit, and export.</p>
@@ -1990,6 +2168,7 @@ export default function App() {
               );
             })}
           </div>
+          </>)}
         </div>
       )}
 
@@ -2150,30 +2329,52 @@ export default function App() {
         const donors = activePairs.filter(p=>p.donor_blood_type);
         const recipients = activePairs.filter(p=>p.recipient_blood_type);
 
-        // Build best match for each recipient
-        const recipientMatches = recipients.map(recip=>{
-          const allMatches = donors
-            .filter(d=>d.id!==recip.id)
-            .map(d=>({donor:d, result:calculateCompatibility(d,recip)}))
-            .filter(m=>m.result.reasons.abo)
-            .sort((a,b)=>(b.result.score||0)-(a.result.score||0));
-          const best = allMatches[0]||null;
-          const waitlistDays = recip.recipient_dialysis_start
-            ? Math.floor((Date.now()-new Date(recip.recipient_dialysis_start))/(86400000))
-            : null;
-          return {recip, best, allMatches, waitlistDays};
-        }).sort((a,b)=>{
-          // Sort: best score first, then PRA desc, then waitlist days desc
-          const aScore = a.best?.result.score||0;
-          const bScore = b.best?.result.score||0;
-          if(bScore!==aScore) return bScore-aScore;
-          const aPRA = parseFloat(a.recip.recipient_pra_percent||0);
-          const bPRA = parseFloat(b.recip.recipient_pra_percent||0);
-          if(bPRA!==aPRA) return bPRA-aPRA;
-          return (b.waitlistDays||0)-(a.waitlistDays||0);
-        });
+        // Waitlist rank
+        const recipsByWaitlist=[...recipients].filter(p=>p.recipient_dialysis_start)
+          .sort((a,b)=>new Date(a.recipient_dialysis_start)-new Date(b.recipient_dialysis_start));
+        const waitlistRank=r=>{const i=recipsByWaitlist.findIndex(p=>p.id===r.id);return i>=0?`#${i+1} of ${recipsByWaitlist.length}`:null;};
+        const waitlistDuration=r=>{
+          if(!r.recipient_dialysis_start) return null;
+          const d=Math.floor((Date.now()-new Date(r.recipient_dialysis_start))/86400000);
+          return d>365?`${Math.floor(d/365)}yr ${Math.floor((d%365)/30)}mo`:`${d} days`;
+        };
 
+        // Build best match for each recipient — optionally excluding a withdrawn donor
+        function buildMatches(excludeDonorId=null){
+          const availDonors=donors.filter(d=>d.id!==excludeDonorId);
+          return recipients.map(recip=>{
+            const allMatches = availDonors
+              .filter(d=>d.id!==recip.id)
+              .map(d=>({donor:d, result:calculateCompatibility(d,recip)}))
+              .filter(m=>m.result.reasons.abo)
+              .sort((a,b)=>(b.result.score||0)-(a.result.score||0));
+            const best = allMatches[0]||null;
+            const days = recip.recipient_dialysis_start
+              ? Math.floor((Date.now()-new Date(recip.recipient_dialysis_start))/(86400000)) : null;
+            // Confidence flags
+            const flags=[];
+            if(best){
+              if(best.donor.donor_cmv==="Positive"&&recip.recipient_cmv==="Negative") flags.push("CMV D+/R−");
+              const dw=parseFloat(best.donor.donor_weight_kg||0),rw=parseFloat(recip.recipient_weight_kg||0);
+              if(dw&&rw&&Math.abs(dw-rw)>20) flags.push("Size gap");
+              if(parseFloat(recip.recipient_pra_percent||0)>80) flags.push("High PRA");
+            }
+            return {recip, best, allMatches, waitlistDays:days, flags};
+          }).sort((a,b)=>{
+            const aScore=a.best?.result.score||0,bScore=b.best?.result.score||0;
+            if(bScore!==aScore) return bScore-aScore;
+            const aPRA=parseFloat(a.recip.recipient_pra_percent||0),bPRA=parseFloat(b.recip.recipient_pra_percent||0);
+            if(bPRA!==aPRA) return bPRA-aPRA;
+            return (b.waitlistDays||0)-(a.waitlistDays||0);
+          });
+        }
+
+        const [whatIfDonor,setWhatIfDonor]=useState(null);
+        const recipientMatches=buildMatches(whatIfDonor);
         const noMatchCount = recipientMatches.filter(m=>!m.best).length;
+        const affectedByWithdrawal = whatIfDonor
+          ? recipientMatches.filter(m=>!m.best&&buildMatches(null).find(bm=>bm.recip.id===m.recip.id)?.best).length
+          : 0;
 
         function matchNarrative(rm){
           const {recip,best,waitlistDays}=rm;
@@ -2200,22 +2401,43 @@ export default function App() {
                 <h1 style={S.pageTitle}>Best Match Cards</h1>
                 <p style={S.subtitle}>Top compatible donor per recipient · Sorted by score, sensitization, then waitlist time</p>
               </div>
-              <button onClick={()=>exportMatchCards(activePairs)}
-                style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export PDF</button>
+              <button onClick={()=>exportMatchCards(activePairs)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export PDF</button>
+            </div>
+
+            {/* What-if analysis */}
+            <div style={{padding:"12px 16px",borderRadius:8,background:"#131c26",border:"1px solid #1e2d3d",marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:"#b0bec5",fontFamily:"'DM Mono', monospace",letterSpacing:"0.06em",flexShrink:0}}>WHAT IF</span>
+              <select value={whatIfDonor||""} onChange={e=>setWhatIfDonor(e.target.value||null)}
+                style={{...S.select,width:220,fontSize:13}}>
+                <option value="">— a donor withdraws?</option>
+                {donors.map(d=><option key={d.id} value={d.id}>{d.donor_name||"Unnamed"} ({d.donor_blood_type})</option>)}
+              </select>
+              {whatIfDonor&&(
+                <>
+                  <span style={{fontSize:13,color:affectedByWithdrawal>0?"#ff9999":"#4db882"}}>
+                    {affectedByWithdrawal>0
+                      ?`⚠ ${affectedByWithdrawal} recipient${affectedByWithdrawal!==1?"s":""} would lose their best match`
+                      :"✓ No recipients lose their best match"}
+                  </span>
+                  <button onClick={()=>setWhatIfDonor(null)} style={{background:"none",border:"none",color:"#6a8090",cursor:"pointer",fontSize:12}}>Clear</button>
+                </>
+              )}
             </div>
 
             {noMatchCount>0&&(
-              <div style={{padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:12,marginBottom:16}}>
-                {noMatchCount} recipient{noMatchCount!==1?"s":""} have no compatible donor in the current registry
+              <div style={{padding:"10px 14px",borderRadius:8,background:"#2a1010",border:"1px solid #3a1010",color:"#ff8a8a",fontSize:13,marginBottom:16}}>
+                {whatIfDonor?"After withdrawal: ":""}{noMatchCount} recipient{noMatchCount!==1?"s":""} have no compatible donor in the current registry
               </div>
             )}
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:12}}>
-              {recipientMatches.map(({recip,best,allMatches,waitlistDays},i)=>{
+              {recipientMatches.map(({recip,best,allMatches,waitlistDays,flags},i)=>{
                 const s=best?scoreStyle(best.result.score,best.result.aboOnly):null;
                 const pra=parseFloat(recip.recipient_pra_percent||0);
                 const rAge=calcAge(recip.recipient_year_born);
                 const dAge=best?calcAge(best.donor.donor_year_born):null;
+                const rank=waitlistRank(recip);
+                const duration=waitlistDuration(recip);
                 return(
                   <div key={recip.id} style={{...S.card,borderColor:best?`${s.text}33`:"#3a1010"}}>
                     {/* Recipient */}
@@ -2230,8 +2452,16 @@ export default function App() {
                         <div style={{fontSize:12,color:"#b0bec5",display:"flex",gap:10,flexWrap:"wrap"}}>
                           {rAge&&<span>Age {rAge}</span>}
                           {recip.recipient_pra_percent&&<span>PRA {recip.recipient_pra_percent}%</span>}
-                          {waitlistDays&&<span>{waitlistDays>365?`${Math.floor(waitlistDays/365)}yr ${Math.floor((waitlistDays%365)/30)}mo`:`${waitlistDays}d`} waitlist</span>}
+                          {duration&&<span title="Time on waitlist">{duration} waiting</span>}
+                          {rank&&<span style={{color:"#6ab4d0"}}>{rank} by waitlist</span>}
                         </div>
+                        {flags&&flags.length>0&&(
+                          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
+                            {flags.map((f,fi)=>(
+                              <span key={fi} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:"#2a1500",color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>⚠ {f}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {best&&s&&(
                         <div style={{textAlign:"center",padding:"8px 14px",borderRadius:8,background:s.bg,flexShrink:0}}>
