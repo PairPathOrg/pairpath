@@ -49,7 +49,7 @@ function calculateCompatibility(donor, recipient) {
   const pra = recipient.recipient_pra_percent || 0;
   const highPRA = pra > 80;
   const moderatePRA = pra > 50 && pra <= 80;
-  const sizeDiff = Math.abs((donor.donor_weight_kg || 70) - (recipient.recipient_weight_kg || 70));
+  const sizeDiff = Math.abs((cleanWeight(donor.donor_weight_kg) || 70) - (cleanWeight(recipient.recipient_weight_kg) || 70));
   const sizeOk = sizeDiff < 20;
   const cmvRisk = donor.donor_cmv === "Positive" && recipient.recipient_cmv === "Negative";
   const dAge = calcAge(donor.donor_year_born), rAge = calcAge(recipient.recipient_year_born);
