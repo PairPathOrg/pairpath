@@ -385,6 +385,9 @@ function exportMatches(pairs, level="standard") {
       const recipHt  = cleanHt(recipient.recipient_height_cm);
       const waitlist = recipient.recipient_dialysis_start
         ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
+      const cmvFlag = donor.donor_cmv==="Positive"&&recipient.recipient_cmv==="Negative"?"⚠ CMV D+/R-":"";
+      const sizeFlag = donorWt&&recipWt&&Math.abs(donorWt-recipWt)>20?"⚠ Size gap":"";
+      const flags = [cmvFlag,sizeFlag].filter(Boolean).join("; ")||"None";
       rows.push({
         pair_score:               result.score ?? "ABO only",
         donor:                    donor.donor_name || donor.id,
