@@ -32,11 +32,7 @@ function countHLAMismatches(donor, recipient) {
 //   Secondary (25pts): PRA sensitization — high PRA recipient who IS matched
 //                      gets a BONUS (hardest match to find = most valuable).
 //                      Unmatched high PRA costs 15pts vs low PRA baseline.
-//   Modifiers (15pts): CMV D+/R- risk (-8), size mismatch >20kg (-4), age gap >15yr (-3)
-//   Blood type bonus  : O→O exact match +8 (preserves O donor for O-only recipients),
-//                       other exact type match (A→A, B→B, AB→AB) +4.
-//                       O donor → non-O recipient is compatible but flagged as
-//                       suboptimal chain use (no bonus, no penalty).
+//   Modifiers (15pts): CMV D+/R- risk (-8), size mismatch >40kg (-4), age gap >15yr (-3)
 //
 // TODO: Validate weights against published KPD outcomes data.
 // TODO: Consider dialysis vintage (time on dialysis) as a prioritization factor.
@@ -46,9 +42,7 @@ function calculateCompatibility(donor, recipient) {
     return { compatible: false, score: null, aboOnly: true, reasons: {} };
   }
 
-  const dBlood = donor.donor_blood_type;
-  const rBlood = recipient.recipient_blood_type;
-  const aboOk = checkABO(dBlood, rBlood);
+  const aboOk = checkABO(donor.donor_blood_type, recipient.recipient_blood_type);
   const hasHLA = !!(donor.donor_hla_a1 || donor.donor_hla_notes || recipient.recipient_hla_a1 || recipient.recipient_hla_notes);
 
   const hlaMismatches = hasHLA ? countHLAMismatches(donor, recipient) : 0;
@@ -65,28 +59,19 @@ function calculateCompatibility(donor, recipient) {
     ? donor.donor_weight_kg / Math.pow(donor.donor_height_cm / 100, 2) : null;
   const bmiFlag = bmi && bmi > 35;
 
-  // Blood type efficiency bonus
-  // O→O: highest bonus — O recipients can ONLY receive O donors, so this is the ideal use
-  // Exact match (A→A, B→B, AB→AB): smaller bonus — preserves flexibility in chains
-  // O→non-O: compatible but no bonus (O donor is being "used up" on a recipient who has more options)
-  const oToO = dBlood === "O" && rBlood === "O";
-  const exactBloodMatch = dBlood === rBlood;
-  const bloodBonus = oToO ? 8 : exactBloodMatch ? 4 : 0;
-  const suboptimalOUse = dBlood === "O" && rBlood !== "O"; // informational flag only
-
   // No number shown without HLA — only ABO status
   if (!aboOk) {
     return {
       compatible: false, score: 0, aboOnly: !hasHLA,
-      reasons: { abo: false, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra, oToO, exactBloodMatch, suboptimalOUse }
+      reasons: { abo: false, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
     };
   }
   if (!hasHLA) {
     // ABO compatible but no HLA — return a capped score so grid stays colorful
-    const aboScore = Math.max(0, Math.min(100, 70 + bloodBonus - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0) - (ageFlag ? 3 : 0)));
+    const aboScore = Math.max(0, 70 - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0) - (ageFlag ? 3 : 0));
     return {
       compatible: true, score: aboScore, aboOnly: true,
-      reasons: { abo: true, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra, oToO, exactBloodMatch, suboptimalOUse }
+      reasons: { abo: true, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
     };
   }
 
@@ -103,14 +88,14 @@ function calculateCompatibility(donor, recipient) {
   const bmiPenalty  = bmiFlag  ?  2 : 0;
 
   const score = Math.min(100, Math.max(0,
-    hlaPoints + praPoints + bloodBonus - cmvPenalty - sizePenalty - agePenalty - bmiPenalty
+    hlaPoints + praPoints - cmvPenalty - sizePenalty - agePenalty - bmiPenalty
   ));
 
   return {
     compatible: hlaMismatches <= 4,
     score,
     aboOnly: false,
-    reasons: { abo: true, hlaMismatches, highSensitization: highPRA, moderatePRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra, oToO, exactBloodMatch, suboptimalOUse }
+    reasons: { abo: true, hlaMismatches, highSensitization: highPRA, moderatePRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
   };
 }
 
@@ -235,7 +220,12 @@ function scoreStyle(score, aboOnly) {
   return { bg: "#7a1010", text: "#ff9999", label: "Incompatible" };
 }
 
-
+const URGENCY_COLORS = { High: "#ff8a8a", Medium: "#ffd166", Low: "#6effc6" };
+const URGENCY_DEFS = {
+  High: "Needs transplant within weeks to months. Deteriorating on dialysis or medically urgent.",
+  Medium: "Stable but needs transplant within the year. Standard priority.",
+  Low: "Early evaluation or preemptive. Medically stable with longer window.",
+};
 const PAIR_TYPES = [
   { value: "paired", label: "Incompatible Pair", desc: "Recipient with a willing but incompatible donor" },
   { value: "altruistic", label: "Altruistic Donor", desc: "Willing donor with no paired recipient" },
@@ -259,7 +249,7 @@ const emptyForm = {
   donor_hla_dr1:"", donor_hla_dr2:"", donor_hla_notes:"",
   donor_egfr:"", donor_cmv:"Unknown", donor_backup:false, donor_zip:"",
   donor_priority:"Primary",
-  status:"active", notes:"", centre:"",
+  urgency:"Medium", status:"active", notes:"", centre:"",
 };
 
 // ── CSV ────────────────────────────────────────────────────────────────────
@@ -317,10 +307,8 @@ function exportMatchCards(pairs) {
       ?(waitlistDays>365?`${Math.floor(waitlistDays/365)}yr ${Math.floor((waitlistDays%365)/30)}mo`:`${waitlistDays} days`)
       :"—";
     const pra=parseFloat(recip.recipient_pra_percent||0);
-    const sanitizeWt=v=>{const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,"")));return(!isNaN(n)&&n>0&&n<400)?n:null;};
-    const recipWtClean=sanitizeWt(recip.recipient_weight_kg);
     const weightDiff=best&&best.donor.donor_weight_kg&&recip.recipient_weight_kg
-      ?Math.abs((sanitizeWt(best.donor.donor_weight_kg)||0)-(recipWtClean||0)):null;
+      ?Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg)):null;
     const score=best?.result.score;
     const scoreColor=score>=75?"#0a6e40":score>=55?"#1a5a1a":score>=35?"#6b4a00":"#6e0d0d";
     const scoreLabel=score>=75?"Strong":score>=55?"Good":score>=35?"Marginal":score!=null?"Poor":"ABO only";
@@ -333,7 +321,7 @@ function exportMatchCards(pairs) {
             <div style="font-size:12px;color:#555;display:flex;gap:12px;flex-wrap:wrap">
               ${recip.recipient_pra_percent?`<span>PRA ${recip.recipient_pra_percent}%${pra>80?" ⚠":""}` :"<span>PRA —"}  </span>
               <span>Waitlist: ${waitlistStr}</span>
-              ${recipWtClean!=null?`<span>Weight: ${recipWtClean}kg</span>`:""}
+              ${recip.recipient_weight_kg?`<span>Weight: ${recip.recipient_weight_kg}kg</span>`:""}
             </div>
           </div>
           ${best?`<div style="text-align:center;padding:8px 16px;border-radius:6px;background:${scoreColor}22;border:1px solid ${scoreColor}44">
@@ -395,42 +383,29 @@ function exportMatches(pairs, level="standard") {
       const result = calculateCompatibility(donor, recipient);
       if(!result.reasons.abo) return;
       const cleanWt = v => { const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,""))); return (!isNaN(n)&&n>0&&n<400)?n:""; };
-      const cleanHt = v => { const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,""))); return (!isNaN(n)&&n>0&&n<250)?n:""; };
       const donorWt  = cleanWt(donor.donor_weight_kg);
       const recipWt  = cleanWt(recipient.recipient_weight_kg);
-      const donorHt  = cleanHt(donor.donor_height_cm);
-      const recipHt  = cleanHt(recipient.recipient_height_cm);
       const waitlist = recipient.recipient_dialysis_start
         ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
-      const cmvFlag = donor.donor_cmv==="Positive"&&recipient.recipient_cmv==="Negative"?"⚠ CMV D+/R-":"";
-      const sizeFlag = donorWt&&recipWt&&Math.abs(donorWt-recipWt)>20?"⚠ Size gap":"";
-      const flags = [cmvFlag,sizeFlag].filter(Boolean).join("; ")||"None";
       rows.push({
-        pair_score:               result.score ?? "ABO only",
-        donor:                    donor.donor_name || donor.id,
-        donor_blood:              donor.donor_blood_type,
-        donor_age:                calcAge(donor.donor_year_born)||"",
-        donor_height:             donorHt,
-        donor_weight:             donorWt,
-        donor_egfr:               donor.donor_egfr||"",
-        donor_cmv:                donor.donor_cmv||"",
-        recipient:                recipient.recipient_name || recipient.id,
-        recipient_blood:          recipient.recipient_blood_type,
-        recipient_age:            calcAge(recipient.recipient_year_born)||"",
-        recipient_height:         recipHt,
-        recipient_weight:         recipWt,
-        recipient_cmv:            recipient.recipient_cmv||"",
-        pra:                      recipient.recipient_pra_percent ?? "",
-        waitlist_date:            waitlist,
-        waitlist_duration:        (()=>{const d=recipient.recipient_dialysis_start?Math.floor((Date.now()-new Date(recipient.recipient_dialysis_start))/86400000):null;return d?(d>365?`${Math.floor(d/365)}yr ${Math.floor((d%365)/30)}mo`:`${d} days`):"—";})(),
-        waitlist_rank:            "",
-        weight_gap_kg:            donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
-        flags,
-        hla_notes:                recipient.recipient_hla_notes||donor.donor_hla_notes||"",
-        intended_recipient:       "",
-        intended_recipient_blood: "",
-        intended_recipient_age:   "",
-        swap:                     "",
+        pair_score:      result.score ?? "ABO only",
+        recipient:       recipient.recipient_name || recipient.id,
+        recipient_blood: recipient.recipient_blood_type,
+        recipient_age:   calcAge(recipient.recipient_year_born)||"",
+        pra:             recipient.recipient_pra_percent ?? "",
+        waitlist_date:   waitlist,
+        recipient_weight:recipWt,
+        donor:           donor.donor_name || donor.id,
+        donor_blood:     donor.donor_blood_type,
+        donor_age:       calcAge(donor.donor_year_born)||"",
+        donor_weight:    donorWt,
+        weight_gap_kg:   donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
+        // Full clinical fields
+        donor_egfr:      donor.donor_egfr||"",
+        donor_cmv:       donor.donor_cmv||"",
+        recipient_cmv:   recipient.recipient_cmv||"",
+        urgency:         recipient.urgency||"",
+        hla_notes:       recipient.recipient_hla_notes||donor.donor_hla_notes||"",
       });
     });
   });
@@ -438,37 +413,18 @@ function exportMatches(pairs, level="standard") {
 
   let header, lines;
   if(level==="quick"){
-    header = "Pair Score,Donor,Donor Blood,Donor Age,Donor Height (cm),Donor Weight (kg),Recipient,Recipient Blood,Recipient Age,Recipient Height (cm),Recipient Weight (kg),PRA %,Waitlist Duration,Waitlist Rank,Flags,Intended Recipient,Intended Recipient Blood,Intended Recipient Age,Swap";
-    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.donor_height,r.donor_weight,r.recipient,r.recipient_blood,r.recipient_age,r.recipient_height,r.recipient_weight,r.pra,r.waitlist_duration,r.waitlist_rank,r.flags,r.intended_recipient,r.intended_recipient_blood,r.intended_recipient_age,r.swap].join(","));
+    header = "Pair Score,Recipient,Recipient Blood Type,Recipient PRA %,Donor,Donor Blood Type";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.donor,r.donor_blood].join(","));
   } else if(level==="full"){
-    header = "Pair Score,Donor,Donor Blood,Donor Age,Donor Height (cm),Donor Weight (kg),Donor eGFR,Donor CMV,Recipient,Recipient Blood,Recipient Age,Recipient Height (cm),Recipient Weight (kg),Recipient CMV,PRA %,Waitlist Date,Waitlist Duration,Waitlist Rank,Weight Gap (kg),Flags,HLA Notes,Intended Recipient,Intended Recipient Blood,Intended Recipient Age,Swap";
-    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.donor_height,r.donor_weight,r.donor_egfr,r.donor_cmv,r.recipient,r.recipient_blood,r.recipient_age,r.recipient_height,r.recipient_weight,r.recipient_cmv,r.pra,r.waitlist_date,r.waitlist_duration,r.waitlist_rank,r.weight_gap_kg,r.flags,r.hla_notes,r.intended_recipient,r.intended_recipient_blood,r.intended_recipient_age,r.swap].join(","));
+    header = "Pair Score,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Recipient CMV,Urgency,Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Donor eGFR,Donor CMV,Weight Gap (kg),HLA Notes";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.recipient_weight,r.recipient_cmv,r.urgency,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.hla_notes].join(","));
   } else {
     // standard
-    header = "Pair Score,Donor,Donor Blood,Donor Age,Donor Height (cm),Donor Weight (kg),Recipient,Recipient Blood,Recipient Age,Recipient Height (cm),Recipient Weight (kg),PRA %,Waitlist Duration,Waitlist Rank,Weight Gap (kg),Flags,Intended Recipient,Intended Recipient Blood,Intended Recipient Age,Swap";
-    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.donor_height,r.donor_weight,r.recipient,r.recipient_blood,r.recipient_age,r.recipient_height,r.recipient_weight,r.pra,r.waitlist_duration,r.waitlist_rank,r.weight_gap_kg,r.flags,r.intended_recipient,r.intended_recipient_blood,r.intended_recipient_age,r.swap].join(","));
+    header = "Pair Score,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA %,Waitlist Date,Recipient Weight (kg),Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Weight Gap (kg)";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.recipient_weight,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.weight_gap_kg].join(","));
   }
   const blob = new Blob([[header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_matches_${level}.csv`; a.click();
-}
-
-function parseYearFromAny(val) {
-  // Handles: YYYY, MM/DD/YYYY, YYYY-MM-DD, Excel serial (40000-60000), full ISO datetime
-  if (!val) return val;
-  const s = String(val).trim();
-  // Excel serial date (e.g. 27505 or 45123)
-  const n = parseFloat(s);
-  if (!isNaN(n) && n > 10000 && n < 60000) {
-    const date = new Date((n - 25569) * 86400000);
-    return String(date.getUTCFullYear());
-  }
-  // ISO date or datetime: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
-  if (s.includes("-")) return s.split("-")[0];
-  // MM/DD/YYYY or MM/DD/YY
-  if (s.includes("/")) { const p=s.split("/"); return p[2]?.length===4?p[2]:`20${p[2]}`; }
-  // Already a 4-digit year
-  if (/^\d{4}$/.test(s)) return s;
-  return val;
 }
 
 function parseCSV(text, userId) {
@@ -478,13 +434,9 @@ function parseCSV(text, userId) {
     const vals = row.split(",").map(v=>v.trim().replace(/^"|"$/g,""));
     const obj = {};
     headers.forEach((h,i) => { obj[h] = vals[i]||""; });
-    // Handle DOB columns → extract year
-    if (obj.recipient_dob) obj.recipient_year_born = parseYearFromAny(obj.recipient_dob);
-    if (obj.donor_dob) obj.donor_year_born = parseYearFromAny(obj.donor_dob);
-    // Also clean year_born fields themselves in case they came in as dates or serials
-    if (obj.recipient_year_born) obj.recipient_year_born = parseYearFromAny(obj.recipient_year_born);
-    if (obj.donor_year_born) obj.donor_year_born = parseYearFromAny(obj.donor_year_born);
-    obj.status="active"; obj.pair_type=obj.pair_type||"paired";
+    if (obj.recipient_dob) { const p=obj.recipient_dob.split("/"); if(p.length===3) obj.recipient_year_born=p[2].length===4?p[2]:`20${p[2]}`; }
+    if (obj.donor_dob) { const p=obj.donor_dob.split("/"); if(p.length===3) obj.donor_year_born=p[2].length===4?p[2]:`20${p[2]}`; }
+    obj.status="active"; obj.urgency=obj.urgency||"Medium"; obj.pair_type=obj.pair_type||"paired";
     obj.donor_backup=false; obj.user_id=userId;
     NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined) obj[k]=null;});
     ["donor_blood_type","recipient_blood_type"].forEach(k=>{if(!["A","B","AB","O"].includes(obj[k])) obj[k]=null;});
@@ -514,6 +466,7 @@ const PAIRPATH_FIELDS = [
   {key:"donor_cmv",label:"Donor CMV",required:false,types:["paired","altruistic"]},
   {key:"donor_hla_notes",label:"Donor HLA Notes",required:false,types:["paired","altruistic"]},
   {key:"donor_zip",label:"Donor ZIP",required:false,types:["paired","altruistic"]},
+  {key:"urgency",label:"Urgency",required:false,types:["paired","altruistic","recipient_only"]},
   {key:"notes",label:"Clinical Notes",required:false,types:["paired","altruistic","recipient_only"]},
   {key:"centre",label:"Centre",required:false,types:["paired","altruistic","recipient_only"]},
 ];
@@ -554,6 +507,7 @@ function autoDetect(headers, pairType="paired") {
     {keys:["cmv"],field:isDonorOnly?"donor_cmv":"recipient_cmv"},
     {keys:["dob","date of birth","birth date","date_of_birth"],field:isDonorOnly?"donor_year_born":"recipient_year_born"},
     // Shared fields
+    {keys:["urgency","priority"],field:"urgency"},
     {keys:["notes","clinical_notes","comments"],field:"notes"},
     {keys:["centre","center","hospital","program"],field:"centre"},
   ];
@@ -700,14 +654,6 @@ function AuthScreen({onDemoMode}) {
           </div>
         </div>
 
-        {/* Privacy statement */}
-        <div style={{background:"rgba(77,184,130,0.08)",border:"1px solid rgba(77,184,130,0.2)",borderRadius:8,padding:"14px 16px",marginBottom:24,maxWidth:400}}>
-          <div style={{fontFamily:"'DM Mono', monospace",fontSize:9,color:"#4db882",letterSpacing:"0.12em",marginBottom:6}}>PRIVACY BY DESIGN</div>
-          <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",lineHeight:1.65}}>
-            PairPath uses built-in de-identification tools so real patient names never leave your computer. Identifiers like D1 and R1 are all the system needs — and all it ever sees. Your registry data is stored securely and is never shared, sold, or used for any purpose outside of your matching workflow.
-          </div>
-        </div>
-
         {/* Bottom tagline */}
         <div style={{fontSize:12,color:"rgba(255,255,255,0.3)",lineHeight:1.6,maxWidth:380,fontStyle:"italic"}}>
           Built independently, outside of institutional affiliation, by someone inside the transplant field — because this infrastructure should exist.
@@ -821,12 +767,6 @@ function AuthScreen({onDemoMode}) {
                   <button onClick={agreed?onDemoMode:null} style={{background:"none",border:"1px solid #1e3448",borderRadius:7,padding:"10px",color:agreed?"#1e3448":"#9aabb8",fontSize:13,fontWeight:600,cursor:agreed?"pointer":"not-allowed",width:"100%",fontFamily:"'DM Sans', sans-serif",opacity:agreed?1:0.5,transition:"all 0.2s"}}>
                     Explore Demo Mode
                   </button>
-                  <div style={{background:"#f7f9fb",borderRadius:7,padding:"10px 12px",border:"1px solid #e4eaf0"}}>
-                    <div style={{fontFamily:"'DM Mono', monospace",fontSize:9,color:"#1a6b45",letterSpacing:"0.1em",marginBottom:4}}>PRIVACY BY DESIGN</div>
-                    <div style={{fontSize:11,color:"#4a6070",lineHeight:1.6}}>
-                      Demo data is never saved — nothing you enter here is stored. In live use, PairPath's built-in de-identification tools convert real names to anonymous IDs <span style={{fontWeight:600,color:"#1e3448"}}>(D1, R1)</span> before anything is uploaded. Real patient names stay on your machine and never enter the system.
-                    </div>
-                  </div>
                 </>
               )}
             </div>
@@ -926,14 +866,14 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
 
 // ── Demo Data ──────────────────────────────────────────────────────────────
 const DEMO_PAIRS = [
-  {id:"d1",pair_type:"paired",status:"active",recipient_name:"R1",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_height_cm:162,recipient_year_born:"1968",donor_name:"D1",donor_blood_type:"A",donor_weight_kg:82,donor_height_cm:178,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
-  {id:"d2",pair_type:"paired",status:"active",recipient_name:"R2",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_height_cm:175,recipient_year_born:"1972",donor_name:"D2",donor_blood_type:"A",donor_weight_kg:68,donor_height_cm:165,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
-  {id:"d3",pair_type:"paired",status:"active",recipient_name:"R3",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_height_cm:158,recipient_year_born:"1980",donor_name:"D3",donor_blood_type:"B",donor_weight_kg:79,donor_height_cm:180,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
-  {id:"d4",pair_type:"altruistic",status:"active",donor_name:"D4",donor_blood_type:"O",donor_weight_kg:77,donor_height_cm:174,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
-  {id:"d5",pair_type:"paired",status:"active",recipient_name:"R5",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_height_cm:163,recipient_year_born:"1985",donor_name:"D5",donor_blood_type:"O",donor_weight_kg:88,donor_height_cm:183,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
-  {id:"d6",pair_type:"recipient_only",status:"active",recipient_name:"R6",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_height_cm:155,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
-  {id:"d7",pair_type:"paired",status:"active",recipient_name:"R7",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_height_cm:177,recipient_year_born:"1990",donor_name:"D7",donor_blood_type:"A",donor_weight_kg:65,donor_height_cm:160,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
-  {id:"d8",pair_type:"paired",status:"matched",recipient_name:"R8",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_height_cm:161,recipient_year_born:"1970",donor_name:"D8",donor_blood_type:"O",donor_weight_kg:81,donor_height_cm:176,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
+  {id:"d1",pair_type:"paired",status:"active",urgency:"High",recipient_name:"Maria Santos",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"Carlos Santos",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
+  {id:"d2",pair_type:"paired",status:"active",urgency:"High",recipient_name:"James Okafor",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"Adaeze Okafor",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
+  {id:"d3",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Linda Park",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"David Park",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
+  {id:"d4",pair_type:"altruistic",status:"active",urgency:"Medium",donor_name:"Robert Chen",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
+  {id:"d5",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"Sarah Williams",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"Thomas Williams",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
+  {id:"d6",pair_type:"recipient_only",status:"active",urgency:"High",recipient_name:"Fatima Al-Hassan",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
+  {id:"d7",pair_type:"paired",status:"active",urgency:"Low",recipient_name:"Michael Torres",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"Elena Torres",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
+  {id:"d8",pair_type:"paired",status:"matched",urgency:"High",recipient_name:"Dorothy Kim",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"Steven Kim",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
 ];
 
 // ── Main App ───────────────────────────────────────────────────────────────
@@ -949,6 +889,7 @@ export default function App() {
   const [hoveredCell,setHoveredCell]=useState(null);
   const [search,setSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("active");
+  const [filterUrgency,setFilterUrgency]=useState("all");
   const [filterBlood,setFilterBlood]=useState("all");
   const [filterCentre,setFilterCentre]=useState("all");
   const [filterPairType,setFilterPairType]=useState("all");
@@ -1086,6 +1027,7 @@ export default function App() {
 
   const filteredPairs=visiblePairs.filter(p=>{
     if(filterStatus!=="all"&&p.status!==filterStatus) return false;
+    if(filterUrgency!=="all"&&p.urgency!==filterUrgency) return false;
     if(filterBlood!=="all"&&p.recipient_blood_type!==filterBlood&&p.donor_blood_type!==filterBlood) return false;
     if(filterCentre!=="all"&&p.centre!==filterCentre) return false;
     if(filterPairType!=="all"&&p.pair_type!==filterPairType) return false;
@@ -1098,8 +1040,10 @@ export default function App() {
     return true;
   }).sort((a,b)=>{
     const donors=activePairs.filter(p=>p.donor_blood_type);
+    const urgencyRank={High:0,Medium:1,Low:2};
     function getVal(p,key){
       if(key==="date") return new Date(p.created_at).getTime();
+      if(key==="urgency") return urgencyRank[p.urgency]??1;
       if(key==="lastname") return (p.recipient_name||p.donor_name||"").split(" ").pop().toLowerCase();
       if(key==="pra") return parseFloat(p.recipient_pra_percent||0);
       if(key==="dialysis") return new Date(p.recipient_dialysis_start||0).getTime();
@@ -1118,6 +1062,7 @@ export default function App() {
   const chains=computedChains;
   const stats={
     total:visiblePairs.length,active:activePairs.length,
+    highUrgency:activePairs.filter(p=>p.urgency==="High").length,
     completed:visiblePairs.filter(p=>p.status==="completed").length,
     withdrawn:visiblePairs.filter(p=>p.status==="withdrawn").length,
     withMatch:activePairs.filter(p=>p.recipient_blood_type&&activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length,
@@ -1128,63 +1073,19 @@ export default function App() {
     chainsLong:chains.filter(c=>c.length>=4).length,
   };
 
-  function donorFingerprint(r){
-    const bt=(r.donor_blood_type||"").trim().toUpperCase();
-    const yr=String(r.donor_year_born||"").trim();
-    const wt=String(Math.round(parseFloat(r.donor_weight_kg)||0)||"");
-    const ht=String(Math.round(parseFloat(r.donor_height_cm)||0)||"");
-    if(!bt||!yr||!wt||!ht) return null;
-    return `D|${bt}|${yr}|${wt}|${ht}`;
-  }
-  function recipientFingerprint(r){
-    const bt=(r.recipient_blood_type||"").trim().toUpperCase();
-    const yr=String(r.recipient_year_born||"").trim();
-    const wt=String(Math.round(parseFloat(r.recipient_weight_kg)||0)||"");
-    const ht=String(Math.round(parseFloat(r.recipient_height_cm)||0)||"");
-    if(!bt||!yr||!wt||!ht) return null;
-    return `R|${bt}|${yr}|${wt}|${ht}`;
-  }
-  function findByFingerprint(incoming, excludeId=null){
-    const df=donorFingerprint(incoming);
-    const rf=recipientFingerprint(incoming);
-    const type=incoming.pair_type||"paired";
-    return pairs.find(p=>{
-      if(excludeId&&p.id===excludeId) return false;
-      if(type==="altruistic") return df&&df===donorFingerprint(p);
-      if(type==="recipient_only") return rf&&rf===recipientFingerprint(p);
-      return df&&rf&&df===donorFingerprint(p)&&rf===recipientFingerprint(p);
-    })||null;
-  }
-  function fingerprintMatchScore(incoming, existing){
-    let score=0;
-    const fields=[
-      [incoming.donor_blood_type, existing.donor_blood_type],
-      [incoming.donor_year_born,  existing.donor_year_born],
-      [incoming.donor_weight_kg,  existing.donor_weight_kg],
-      [incoming.donor_height_cm,  existing.donor_height_cm],
-      [incoming.recipient_blood_type, existing.recipient_blood_type],
-      [incoming.recipient_year_born,  existing.recipient_year_born],
-      [incoming.recipient_weight_kg,  existing.recipient_weight_kg],
-      [incoming.recipient_height_cm,  existing.recipient_height_cm],
-    ];
-    fields.forEach(([a,b])=>{
-      if(a&&b&&String(Math.round(parseFloat(a)||0)||a).trim()===String(Math.round(parseFloat(b)||0)||b).trim()) score++;
-    });
-    return score;
-  }
   function isDuplicate(f, excludeId=null){
-    const fp=findByFingerprint(f, excludeId);
-    if(fp) return true;
     return pairs.some(p=>{
       if(excludeId&&p.id===excludeId) return false;
       const dName=(p.donor_name||"").trim().toLowerCase();
       const rName=(p.recipient_name||"").trim().toLowerCase();
       const fDName=(f.donor_name||"").trim().toLowerCase();
       const fRName=(f.recipient_name||"").trim().toLowerCase();
+      // If birth years are both present and different — definitely not the same person
       const donorYearMismatch=p.donor_year_born&&f.donor_year_born&&String(p.donor_year_born)!==String(f.donor_year_born);
       const recipYearMismatch=p.recipient_year_born&&f.recipient_year_born&&String(p.recipient_year_born)!==String(f.recipient_year_born);
       if(f.pair_type==="altruistic") return dName&&dName===fDName&&!donorYearMismatch;
       if(f.pair_type==="recipient_only") return rName&&rName===fRName&&!recipYearMismatch;
+      // Paired: both names must match AND neither birth year can conflict
       return dName&&rName&&dName===fDName&&rName===fRName&&!donorYearMismatch&&!recipYearMismatch;
     });
   }
@@ -1391,7 +1292,7 @@ export default function App() {
     function processRows(headers, dataRows){
       return dataRows.filter(r=>r.some?.(c=>c!=="")).map(row=>{
         const vals=Array.isArray(row)?row:headers.map(h=>row[h]??"");
-        const obj={pair_type:pairType,status:"active",donor_backup:false,user_id:currentUserId,user_email:userEmail};
+        const obj={pair_type:pairType,status:"active",urgency:"Medium",donor_backup:false,user_id:currentUserId,user_email:userEmail};
         headers.forEach((h,i)=>{
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
@@ -1412,57 +1313,31 @@ export default function App() {
       }
 
       const records=processRows(headers,dataRows);
-      const toInsert=[]; const toUpdate=[]; const toFlag=[]; const importedIds=new Set();
-      records.forEach(r=>{
-        const exact=findByFingerprint(r);
-        if(exact){
-          toUpdate.push({id:exact.id,update:{
-            donor_name:r.donor_name||exact.donor_name,
-            recipient_name:r.recipient_name||exact.recipient_name,
-            donor_blood_type:r.donor_blood_type||exact.donor_blood_type,
-            recipient_blood_type:r.recipient_blood_type||exact.recipient_blood_type,
-            donor_year_born:r.donor_year_born||exact.donor_year_born,
-            recipient_year_born:r.recipient_year_born||exact.recipient_year_born,
-            donor_weight_kg:r.donor_weight_kg||exact.donor_weight_kg,
-            recipient_weight_kg:r.recipient_weight_kg||exact.recipient_weight_kg,
-            donor_height_cm:r.donor_height_cm||exact.donor_height_cm,
-            recipient_height_cm:r.recipient_height_cm||exact.recipient_height_cm,
-            donor_egfr:r.donor_egfr||exact.donor_egfr,
-            donor_cmv:r.donor_cmv||exact.donor_cmv,
-            recipient_cmv:r.recipient_cmv||exact.recipient_cmv,
-            recipient_pra_percent:r.recipient_pra_percent||exact.recipient_pra_percent,
-            recipient_dialysis_start:r.recipient_dialysis_start||exact.recipient_dialysis_start,
-            notes:r.notes||exact.notes,
-            status:"active",
-          }});
-          importedIds.add(exact.id);
-        } else {
-          const partial=pairs.find(p=>fingerprintMatchScore(r,p)>=2&&fingerprintMatchScore(r,p)<4);
-          if(partial) toFlag.push({incoming:r,existing:partial});
-          else toInsert.push(r);
-        }
-      });
-      const activeExisting=pairs.filter(p=>p.status==="active"&&!p.donor_backup);
-      const toArchive=activeExisting.filter(p=>!importedIds.has(p.id)&&!toUpdate.find(u=>u.id===p.id));
-      let inserted=0,updated=0,archived=0,errors=[];
-      if(toInsert.length){const{data:ins,error:insErr}=await supabase.from("pairs").insert(toInsert).select();if(insErr)errors.push(insErr.message);else inserted=ins?.length??0;}
-      for(const{id,update} of toUpdate){const{error:updErr}=await supabase.from("pairs").update(update).eq("id",id);if(updErr)errors.push(updErr.message);else updated++;}
-      for(const p of toArchive){const{error:archErr}=await supabase.from("pairs").update({status:"inactive"}).eq("id",p.id);if(archErr)errors.push(archErr.message);else archived++;}
-      const parts=[];
-      if(inserted>0) parts.push(`${inserted} added`);
-      if(updated>0)  parts.push(`${updated} updated`);
-      if(archived>0) parts.push(`${archived} archived`);
-      if(toFlag.length>0) parts.push(`${toFlag.length} flagged for review`);
-      const summaryMsg=parts.length?parts.join(", "):"No changes";
-      const hasError=errors.length>0;
+      const dupes=records.filter(r=>isDuplicate(r));
+      const clean=records.filter(r=>!isDuplicate(r));
+      const{data,error}=await supabase.from("pairs").insert(clean).select();
+
       if(sheetContext){
-        const result={sheetName:sheetContext.name,imported:inserted,updated,archived,flagged:toFlag.length,dupes:0,error:hasError?errors[0]:null};
-        setXlsxResults(prev=>[...prev,result]);
-        addAudit("BULK IMPORT",`Sheet "${sheetContext.name}": ${summaryMsg}`);
-        setXlsxSheets(prev=>{const remaining=prev.slice(1);if(!remaining.length)setXlsxSummaryVisible(true);return remaining;});
+        // Sheet queue mode — record result and advance to next sheet
+        const result={sheetName:sheetContext.name,imported:data?.length??0,dupes:dupes.length,error:error?.message||null};
+        setXlsxResults(prev=>{
+          const updated=[...prev,result];
+          return updated;
+        });
+        addAudit("BULK IMPORT",`Sheet "${sheetContext.name}": imported ${data?.length??0} entries`);
+        // Advance queue — remove first sheet
+        setXlsxSheets(prev=>{
+          const remaining=prev.slice(1);
+          if(!remaining.length) setXlsxSummaryVisible(true);
+          return remaining;
+        });
       } else {
-        if(hasError)setUploadResult({success:false,message:errors[0]});
-        else{addAudit("BULK IMPORT",`Imported: ${summaryMsg}`);setUploadResult({success:true,message:summaryMsg+(toFlag.length>0?" — check registry for flagged entries":"")});}
+        // CSV mode
+        if(error)setUploadResult({success:false,message:error.message});
+        else{
+          addAudit("BULK IMPORT",`Imported ${data.length} entries via CSV`);
+          setUploadResult({success:true,message:`${data.length} entries imported.${dupes.length>0?` ${dupes.length} duplicate(s) skipped.`:""}`});
+        }
         setCsvMapper(null);
       }
     }catch(err){
@@ -1664,10 +1539,8 @@ export default function App() {
                 <div style={{display:"flex",gap:10,alignItems:"center"}}>
                   {r.error&&r.error!=="Skipped"&&<span style={{color:"#ff8a8a",fontSize:11}}>{r.error}</span>}
                   {r.error==="Skipped"&&<span style={{color:"#90a4b4",fontSize:11}}>Skipped</span>}
-                  {!r.error&&r.imported>0&&<span style={{color:"#4db882",fontSize:12}}>{r.imported} added</span>}
-                  {!r.error&&r.updated>0&&<span style={{color:"#6ab4d0",fontSize:12}}>{r.updated} updated</span>}
-                  {!r.error&&r.archived>0&&<span style={{color:"#90a4b4",fontSize:11}}>{r.archived} archived</span>}
-                  {!r.error&&r.flagged>0&&<span style={{color:"#ffd166",fontSize:11}}>{r.flagged} flagged</span>}
+                  {!r.error&&<span style={{color:"#4db882",fontSize:12}}>{r.imported} imported</span>}
+                  {r.dupes>0&&<span style={{color:"#ffd166",fontSize:11}}>{r.dupes} dupes skipped</span>}
                 </div>
               </div>
             ))}
@@ -1680,14 +1553,14 @@ export default function App() {
 
       {/* Export Matches Detail Level Modal */}
       {showMatchExport&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,pointerEvents:"all"}}>
-          <div style={{...S.card,maxWidth:480,width:"90%",pointerEvents:"all"}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{...S.card,maxWidth:480,width:"90%"}}>
             <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>Export Matches</div>
             <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by Pair Score.</p>
             {[
-              {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · Height · PRA%",cols:"8 columns — for a fast first look in a meeting"},
-              {level:"standard",label:"Standard",desc:"+ Age · Height · Weights · Waitlist Date · Weight Gap",cols:"14 columns — recommended for most presentations"},
-              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · HLA Notes · Chain Columns",cols:"20 columns — for detailed clinical review"},
+              {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · PRA%","cols":"6 columns — for a fast first look in a meeting"},
+              {level:"standard",label:"Standard",desc:"+ Age · Waitlist Date · Weights · Weight Gap","cols":"12 columns — recommended for most presentations"},
+              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · Urgency · HLA Notes","cols":"17 columns — for detailed clinical review"},
             ].map(({level,label,desc,cols})=>(
               <button key={level} onClick={()=>{exportMatches(visiblePairs,level);setShowMatchExport(false);}}
                 style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
@@ -1791,11 +1664,8 @@ export default function App() {
             style={{...S.tag(demoMode?"#ffd166":"#7a90a0"),cursor:"pointer",border:`1px solid ${demoMode?"#ffd16644":"#2a3a4a"}`,background:demoMode?"#2a1e0022":"transparent",fontSize:10,padding:"2px 8px"}}>
             {demoMode?"● DEMO":"DEMO"}
           </button>
-          {demoMode&&(
-            <span style={{fontSize:11,color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>
-              demo data — not saved · real names never leave your machine
-            </span>
-          )}
+          {demoMode&&<span style={{fontSize:11,color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>demo data — not saved</span>}
+          {stats.highUrgency>0&&!demoMode&&<span style={S.tag("#ff8a8a")}>{stats.highUrgency} HIGH URGENCY</span>}
         </div>
         <nav style={{display:"flex",gap:2}}>
           {[["grid","Grid"],["registry","Registry"],["matches","Matches"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l])=>(
@@ -1826,7 +1696,10 @@ export default function App() {
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
-
+            <select value={filterUrgency} onChange={e=>setFilterUrgency(e.target.value)} style={{...S.select,width:130}}>
+              <option value="all">All Urgency</option>
+              {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
+            </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
               {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:11,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
@@ -1862,10 +1735,12 @@ export default function App() {
                 <tbody>
                   {activePairs.filter(p=>p.recipient_blood_type)
                     .filter(p=>filterBlood==="all"||p.recipient_blood_type===filterBlood)
+                    .filter(p=>filterUrgency==="all"||p.urgency===filterUrgency)
                     .map((recipient,ri)=>(
                     <tr key={recipient.id} style={{background:recipient.id===flash?"#0d2a1e":ri%2===0?"#0d1219":"#0c1018",transition:"background 0.5s"}}>
                       <td style={{padding:"10px 16px",borderBottom:"1px solid #141c24",borderRight:"1px solid #1e2d3d"}}>
                         <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{width:10,height:10,borderRadius:"50%",background:URGENCY_COLORS[recipient.urgency]||"#5a6a7a",flexShrink:0}} title={URGENCY_DEFS[recipient.urgency]}/>
                           <div>
                             <div style={{fontSize:13,fontWeight:600,color:"#ffffff"}}>{recipient.recipient_name}</div>
                             <div style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#b0bec5",marginTop:2}}>
@@ -1937,6 +1812,10 @@ export default function App() {
               <option value="all">All Status</option>
               {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
+            <select value={filterUrgency} onChange={e=>setFilterUrgency(e.target.value)} style={{...S.select,width:120}}>
+              <option value="all">All Urgency</option>
+              {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
+            </select>
             <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:130}}>
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
@@ -1965,6 +1844,7 @@ export default function App() {
                   <option value="score">Best Match Score</option>
                   <option value="dialysis">Time on Dialysis</option>
                   <option value="pra">PRA % (sensitization)</option>
+                  <option value="urgency">Urgency</option>
                   <option value="lastname">Last Name</option>
                 </select>
                 <button onClick={()=>{const ns=[...sortStack];ns[i]={...ns[i],dir:ns[i].dir==="desc"?"asc":"desc"};setSortStack(ns);}}
@@ -2032,6 +1912,7 @@ export default function App() {
                 <div key={pair.id} style={{...S.card,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",borderColor:isSelected?"#2dd4a066":"#1e2d3d",background:isSelected?"#0d1a14":"#131c26"}}>
                   {canEdit&&<input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(pair.id)} style={{cursor:"pointer",width:16,height:16,flexShrink:0}}/>}
                   {!canEdit&&<div style={{width:16,height:16,flexShrink:0}}/>}
+                  <div style={{width:6,height:44,borderRadius:3,background:URGENCY_COLORS[pair.urgency]||"#6a8090",flexShrink:0}} title={pair.urgency}/>
                   <span style={S.tag("#7a90a0")}>{pairTypeLabel(pair.pair_type)}</span>
                   <div style={{flex:1,minWidth:180}}>
                     {pair.recipient_name&&(
@@ -2039,6 +1920,7 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
                           <span style={{fontSize:14,fontWeight:600,color:"#ffffff"}}>{pair.recipient_name}</span>
                           {pair.recipient_blood_type&&<span style={S.tag("#3d8c6e")}>{pair.recipient_blood_type}</span>}
+                          {pair.urgency==="High"&&<span style={S.tag("#ff8a8a")}>URGENT</span>}
                           {pair.recipient_pra_percent>80&&<span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
                         </div>
                         <div style={{fontSize:12,color:"#b0bec5"}}>
@@ -2176,6 +2058,7 @@ export default function App() {
             {[
               {label:"Total Entries",value:stats.total,color:"#b0bec5"},
               {label:"Active",value:stats.active,color:"#4db882"},
+              {label:"High Urgency",value:stats.highUrgency,color:"#ff8a8a"},
               {label:"With Match",value:stats.withMatch,color:"#6effc6"},
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
@@ -2210,6 +2093,20 @@ export default function App() {
                 );
               })}
             </div>
+            <div style={S.card}>
+              <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>HIGH URGENCY — NO MATCH YET</div>
+              {activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length===0?(
+                <div style={{fontSize:13,color:"#4db882"}}>All high urgency recipients have at least one compatible match ✓</div>
+              ):(
+                activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).map(p=>(
+                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,fontSize:12}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",background:"#ff8a8a",flexShrink:0}}/>
+                    <span style={{color:"#ffffff"}}>{p.recipient_name}</span>
+                    <span style={{color:"#b0bec5"}}>· {p.recipient_blood_type} · PRA {p.recipient_pra_percent||"?"}%</span>
+                  </div>
+                ))
+              )}
+            </div>
             {appMode==="national"&&centres.length>0&&(
               <div style={S.card}>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTER</div>
@@ -2236,6 +2133,7 @@ export default function App() {
                 <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12}}>
                   <span style={{color:"#c8d4dc"}}>{p.recipient_name||p.donor_name}</span>
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <span style={S.tag(URGENCY_COLORS[p.urgency]||"#5a6a7a")}>{p.urgency}</span>
                     <span style={{color:"#6a8090",fontFamily:"'DM Mono', monospace",fontSize:11}}>
                       {p.created_at?new Date(p.created_at).toLocaleDateString():""}
                     </span>
@@ -2327,6 +2225,7 @@ export default function App() {
                           <span style={{fontSize:15,fontWeight:600,color:"#ffffff"}}>{recip.recipient_name||"Unnamed"}</span>
                           <span style={S.tag("#3d8c6e")}>{recip.recipient_blood_type}</span>
                           {pra>80&&<span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
+                          {recip.urgency==="High"&&<span style={S.tag("#ff8a8a")}>URGENT</span>}
                         </div>
                         <div style={{fontSize:12,color:"#b0bec5",display:"flex",gap:10,flexWrap:"wrap"}}>
                           {rAge&&<span>Age {rAge}</span>}
@@ -2642,7 +2541,12 @@ export default function App() {
           </div>
 
           <div style={{...S.card,marginBottom:20}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+              <div><label style={S.label}>URGENCY *</label>
+                <select value={form.urgency} onChange={e=>setForm(f=>({...f,urgency:e.target.value}))} style={S.select}>
+                  {["High","Medium","Low"].map(u=><option key={u} value={u}>{u} — {URGENCY_DEFS[u].split(".")[0]}</option>)}
+                </select>
+              </div>
               {form.pair_type==="paired"&&(
                 <div><label style={S.label}>DONOR-RECIPIENT RELATIONSHIP</label>
                   <select value={form.recipient_relationship} onChange={e=>setForm(f=>({...f,recipient_relationship:e.target.value}))} style={S.select}>
