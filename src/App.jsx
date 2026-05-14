@@ -2118,7 +2118,8 @@ export default function App() {
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Export CSV</button>
               <button onClick={()=>setShowMatchExport(true)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
-          </div>
+          </>
+          )}
 
           {uploadResult&&(
             <div style={{marginBottom:16,padding:"10px 16px",borderRadius:8,background:uploadResult.success?"#0d2a1e":"#2a1010",border:`1px solid ${uploadResult.success?"#1a3028":"#3a1010"}`,color:uploadResult.success?"#2dd4a0":"#ff8a8a",fontSize:13}}>
