@@ -1139,14 +1139,12 @@ export default function App() {
   };
 
   // ── Fingerprint helpers ─────────────────────────────────────────────────────
-  // A fingerprint uniquely identifies a person by demographics (not name/ID).
-  // Used to safely detect the same person across re-uploads even when names change.
   function donorFingerprint(r){
     const bt=(r.donor_blood_type||"").trim().toUpperCase();
     const yr=String(r.donor_year_born||"").trim();
     const wt=String(Math.round(parseFloat(r.donor_weight_kg)||0)||"");
     const ht=String(Math.round(parseFloat(r.donor_height_cm)||0)||"");
-    if(!bt||!yr||!wt||!ht) return null; // need all 4 fields
+    if(!bt||!yr||!wt||!ht) return null;
     return `D|${bt}|${yr}|${wt}|${ht}`;
   }
   function recipientFingerprint(r){
@@ -1157,7 +1155,6 @@ export default function App() {
     if(!bt||!yr||!wt||!ht) return null;
     return `R|${bt}|${yr}|${wt}|${ht}`;
   }
-  // Returns matching existing pair by fingerprint, or null
   function findByFingerprint(incoming, excludeId=null){
     const df=donorFingerprint(incoming);
     const rf=recipientFingerprint(incoming);
@@ -1169,7 +1166,6 @@ export default function App() {
       return df&&rf&&df===donorFingerprint(p)&&rf===recipientFingerprint(p);
     })||null;
   }
-  // Returns number of fingerprint fields that match (for partial-match warning)
   function fingerprintMatchScore(incoming, existing){
     let score=0;
     const fields=[
@@ -1187,12 +1183,9 @@ export default function App() {
     });
     return score;
   }
-  // Legacy name-match duplicate check (for manual form entry)
   function isDuplicate(f, excludeId=null){
-    // First try fingerprint
     const fp=findByFingerprint(f, excludeId);
     if(fp) return true;
-    // Fall back to name match
     return pairs.some(p=>{
       if(excludeId&&p.id===excludeId) return false;
       const dName=(p.donor_name||"").trim().toLowerCase();
@@ -1497,67 +1490,42 @@ export default function App() {
       }
 
       const records=processRows(headers,dataRows);
-
-      // ── Fingerprint-aware import logic ───────────────────────────────────
-      // For each record: exact fingerprint match → update, new → insert,
-      // partial match (2-3 fields) → flag for review, missing from upload → archive
       const toInsert=[]; const toUpdate=[]; const toFlag=[]; const importedIds=new Set();
-
       records.forEach(r=>{
         const exact=findByFingerprint(r);
         if(exact){
-          // Same person, possibly new name/ID — update demographics, keep original ID
-          toUpdate.push({id:exact.id, update:{
-            donor_name:        r.donor_name||exact.donor_name,
-            recipient_name:    r.recipient_name||exact.recipient_name,
-            donor_blood_type:  r.donor_blood_type||exact.donor_blood_type,
-            recipient_blood_type: r.recipient_blood_type||exact.recipient_blood_type,
-            donor_year_born:   r.donor_year_born||exact.donor_year_born,
-            recipient_year_born: r.recipient_year_born||exact.recipient_year_born,
-            donor_weight_kg:   r.donor_weight_kg||exact.donor_weight_kg,
-            recipient_weight_kg: r.recipient_weight_kg||exact.recipient_weight_kg,
-            donor_height_cm:   r.donor_height_cm||exact.donor_height_cm,
-            recipient_height_cm: r.recipient_height_cm||exact.recipient_height_cm,
-            donor_egfr:        r.donor_egfr||exact.donor_egfr,
-            donor_cmv:         r.donor_cmv||exact.donor_cmv,
-            recipient_cmv:     r.recipient_cmv||exact.recipient_cmv,
-            recipient_pra_percent: r.recipient_pra_percent||exact.recipient_pra_percent,
-            recipient_dialysis_start: r.recipient_dialysis_start||exact.recipient_dialysis_start,
-            notes:             r.notes||exact.notes,
-            status:            "active",
+          toUpdate.push({id:exact.id,update:{
+            donor_name:r.donor_name||exact.donor_name,
+            recipient_name:r.recipient_name||exact.recipient_name,
+            donor_blood_type:r.donor_blood_type||exact.donor_blood_type,
+            recipient_blood_type:r.recipient_blood_type||exact.recipient_blood_type,
+            donor_year_born:r.donor_year_born||exact.donor_year_born,
+            recipient_year_born:r.recipient_year_born||exact.recipient_year_born,
+            donor_weight_kg:r.donor_weight_kg||exact.donor_weight_kg,
+            recipient_weight_kg:r.recipient_weight_kg||exact.recipient_weight_kg,
+            donor_height_cm:r.donor_height_cm||exact.donor_height_cm,
+            recipient_height_cm:r.recipient_height_cm||exact.recipient_height_cm,
+            donor_egfr:r.donor_egfr||exact.donor_egfr,
+            donor_cmv:r.donor_cmv||exact.donor_cmv,
+            recipient_cmv:r.recipient_cmv||exact.recipient_cmv,
+            recipient_pra_percent:r.recipient_pra_percent||exact.recipient_pra_percent,
+            recipient_dialysis_start:r.recipient_dialysis_start||exact.recipient_dialysis_start,
+            notes:r.notes||exact.notes,
+            status:"active",
           }});
           importedIds.add(exact.id);
         } else {
-          // Check partial match (2-3 of 4 fingerprint fields match) — flag, don't import
           const partial=pairs.find(p=>fingerprintMatchScore(r,p)>=2&&fingerprintMatchScore(r,p)<4);
-          if(partial){
-            toFlag.push({incoming:r, existing:partial});
-          } else {
-            toInsert.push(r);
-          }
+          if(partial) toFlag.push({incoming:r,existing:partial});
+          else toInsert.push(r);
         }
       });
-
-      // Archive active records NOT present in this upload (they were removed from the sheet)
       const activeExisting=pairs.filter(p=>p.status==="active"&&!p.donor_backup);
       const toArchive=activeExisting.filter(p=>!importedIds.has(p.id)&&!toUpdate.find(u=>u.id===p.id));
-
-      // Execute all DB operations
-      let inserted=0, updated=0, archived=0, errors=[];
-      if(toInsert.length){
-        const{data:ins,error:insErr}=await supabase.from("pairs").insert(toInsert).select();
-        if(insErr) errors.push(insErr.message); else inserted=ins?.length??0;
-      }
-      for(const{id,update} of toUpdate){
-        const{error:updErr}=await supabase.from("pairs").update(update).eq("id",id);
-        if(updErr) errors.push(updErr.message); else updated++;
-      }
-      for(const p of toArchive){
-        const{error:archErr}=await supabase.from("pairs").update({status:"inactive"}).eq("id",p.id);
-        if(archErr) errors.push(archErr.message); else archived++;
-      }
-
-      // Build result summary
+      let inserted=0,updated=0,archived=0,errors=[];
+      if(toInsert.length){const{data:ins,error:insErr}=await supabase.from("pairs").insert(toInsert).select();if(insErr)errors.push(insErr.message);else inserted=ins?.length??0;}
+      for(const{id,update} of toUpdate){const{error:updErr}=await supabase.from("pairs").update(update).eq("id",id);if(updErr)errors.push(updErr.message);else updated++;}
+      for(const p of toArchive){const{error:archErr}=await supabase.from("pairs").update({status:"inactive"}).eq("id",p.id);if(archErr)errors.push(archErr.message);else archived++;}
       const parts=[];
       if(inserted>0) parts.push(`${inserted} added`);
       if(updated>0)  parts.push(`${updated} updated`);
@@ -1565,22 +1533,14 @@ export default function App() {
       if(toFlag.length>0) parts.push(`${toFlag.length} flagged for review`);
       const summaryMsg=parts.length?parts.join(", "):"No changes";
       const hasError=errors.length>0;
-
       if(sheetContext){
         const result={sheetName:sheetContext.name,imported:inserted,updated,archived,flagged:toFlag.length,dupes:0,error:hasError?errors[0]:null};
         setXlsxResults(prev=>[...prev,result]);
         addAudit("BULK IMPORT",`Sheet "${sheetContext.name}": ${summaryMsg}`);
-        setXlsxSheets(prev=>{
-          const remaining=prev.slice(1);
-          if(!remaining.length) setXlsxSummaryVisible(true);
-          return remaining;
-        });
+        setXlsxSheets(prev=>{const remaining=prev.slice(1);if(!remaining.length)setXlsxSummaryVisible(true);return remaining;});
       } else {
-        if(hasError) setUploadResult({success:false,message:errors[0]});
-        else{
-          addAudit("BULK IMPORT",`Imported: ${summaryMsg}`);
-          setUploadResult({success:true,message:summaryMsg+(toFlag.length>0?" — check registry for flagged entries":"")});
-        }
+        if(hasError)setUploadResult({success:false,message:errors[0]});
+        else{addAudit("BULK IMPORT",`Imported: ${summaryMsg}`);setUploadResult({success:true,message:summaryMsg+(toFlag.length>0?" — check registry for flagged entries":"")});}
         setCsvMapper(null);
       }
     }catch(err){
@@ -1986,6 +1946,7 @@ export default function App() {
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
+
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
               {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:11,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
@@ -2104,12 +2065,11 @@ export default function App() {
             </div>
           )}
           {(pairs.length>0||demoMode)&&(
+          <>
             <div>
               <h1 style={S.pageTitle}>Registry</h1>
               <p style={{...S.subtitle,marginBottom:0}}>All entries — manage, edit, and export.</p>
             </div>
-          )}
-          {(pairs.length>0||demoMode)&&(
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={downloadDeIDTemplate} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Download De-ID Template</button>
               <label style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",cursor:"pointer",display:"inline-flex",alignItems:"center"}}>
@@ -2119,7 +2079,7 @@ export default function App() {
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Export CSV</button>
               <button onClick={()=>setShowMatchExport(true)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
-          )}
+          </div>
 
           {uploadResult&&(
             <div style={{marginBottom:16,padding:"10px 16px",borderRadius:8,background:uploadResult.success?"#0d2a1e":"#2a1010",border:`1px solid ${uploadResult.success?"#1a3028":"#3a1010"}`,color:uploadResult.success?"#2dd4a0":"#ff8a8a",fontSize:13}}>
@@ -2306,6 +2266,7 @@ export default function App() {
               );
             })}
           </div>
+          </>)}
         </div>
       )}
 
@@ -2374,7 +2335,6 @@ export default function App() {
             {[
               {label:"Total Entries",value:stats.total,color:"#b0bec5"},
               {label:"Active",value:stats.active,color:"#4db882"},
-
               {label:"With Match",value:stats.withMatch,color:"#6effc6"},
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
