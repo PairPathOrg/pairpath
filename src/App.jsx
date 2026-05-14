@@ -1803,9 +1803,9 @@ export default function App() {
             <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>Export Matches</div>
             <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by Pair Score.</p>
             {[
-              {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · PRA%","cols":"6 columns — for a fast first look in a meeting"},
-              {level:"standard",label:"Standard",desc:"+ Age · Waitlist Date · Weights · Weight Gap","cols":"12 columns — recommended for most presentations"},
-              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · Urgency · HLA Notes","cols":"17 columns — for detailed clinical review"},
+              {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · Height · PRA%",cols:"8 columns — for a fast first look in a meeting"},
+              {level:"standard",label:"Standard",desc:"+ Age · Height · Weights · Waitlist Date · Weight Gap",cols:"14 columns — recommended for most presentations"},
+              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · HLA Notes · Chain Columns",cols:"20 columns — for detailed clinical review"},
             ].map(({level,label,desc,cols})=>(
               <button key={level} onClick={()=>{exportMatches(visiblePairs,level);setShowMatchExport(false);}}
                 style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
@@ -1986,8 +1986,8 @@ export default function App() {
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
-            <select value={filterUrgency} onChange={e=>setFilterUrgency(e.target.value)} style={{...S.select,width:130}}>
-              <option value="all">All Urgency</option>
+            <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:130}}>
+              <option value="all">All Blood Types</option>
               {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
             </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
@@ -2138,8 +2138,8 @@ export default function App() {
               <option value="all">All Status</option>
               {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
-            <select value={filterUrgency} onChange={e=>setFilterUrgency(e.target.value)} style={{...S.select,width:120}}>
-              <option value="all">All Urgency</option>
+            <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:120}}>
+              <option value="all">All Blood Types</option>
               {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
             </select>
             <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:130}}>
@@ -2382,7 +2382,7 @@ export default function App() {
             {[
               {label:"Total Entries",value:stats.total,color:"#b0bec5"},
               {label:"Active",value:stats.active,color:"#4db882"},
-              {label:"High Urgency",value:stats.highUrgency,color:"#ff8a8a"},
+
               {label:"With Match",value:stats.withMatch,color:"#6effc6"},
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
