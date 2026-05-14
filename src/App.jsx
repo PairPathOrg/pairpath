@@ -2104,11 +2104,12 @@ export default function App() {
             </div>
           )}
           {(pairs.length>0||demoMode)&&(
-          <>
             <div>
               <h1 style={S.pageTitle}>Registry</h1>
               <p style={{...S.subtitle,marginBottom:0}}>All entries — manage, edit, and export.</p>
             </div>
+          )}
+          {(pairs.length>0||demoMode)&&(
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={downloadDeIDTemplate} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Download De-ID Template</button>
               <label style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",cursor:"pointer",display:"inline-flex",alignItems:"center"}}>
@@ -2118,7 +2119,6 @@ export default function App() {
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Export CSV</button>
               <button onClick={()=>setShowMatchExport(true)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
-          </>
           )}
 
           {uploadResult&&(
@@ -2306,7 +2306,6 @@ export default function App() {
               );
             })}
           </div>
-          </>)}
         </div>
       )}
 
