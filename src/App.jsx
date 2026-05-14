@@ -1986,10 +1986,6 @@ export default function App() {
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
-            <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:130}}>
-              <option value="all">All Blood Types</option>
-              {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
-            </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
               {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:11,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
@@ -2137,10 +2133,6 @@ export default function App() {
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{...S.select,width:150}}>
               <option value="all">All Status</option>
               {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
-            </select>
-            <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:120}}>
-              <option value="all">All Blood Types</option>
-              {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
             </select>
             <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:130}}>
               <option value="all">All Blood Types</option>
