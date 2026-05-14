@@ -1640,8 +1640,8 @@ export default function App() {
 
       {/* Export Matches Detail Level Modal */}
       {showMatchExport&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-          <div style={{...S.card,maxWidth:480,width:"90%"}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,pointerEvents:"all"}}>
+          <div style={{...S.card,maxWidth:480,width:"90%",pointerEvents:"all"}}>
             <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>Export Matches</div>
             <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by Pair Score.</p>
             {[
