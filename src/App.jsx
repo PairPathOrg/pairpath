@@ -1547,7 +1547,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div style={{fontSize:11,color:"#6a8090",marginTop:6}}>
+              <div style={{fontSize:11,color:"#8a9aaa",marginTop:6}}>
                 {importWeightUnit==="lbs"&&"Pounds will be converted to kg automatically"}
                 {importWeightUnit==="kg"&&"Epic exports weight in kg — no conversion needed"}
               </div>
@@ -1575,7 +1575,7 @@ export default function App() {
                   return(
                     <div key={i} style={{padding:"3px 10px",borderRadius:4,fontSize:11,fontFamily:"'DM Mono', monospace",
                       background:done?"#0d2a1e":current?"#1a2e3a":"#131c26",
-                      color:done?"#2dd4a0":current?"#6ab4d0":"#6a8090",
+                      color:done?"#2dd4a0":current?"#6ab4d0":"#8a9aaa",
                       border:`1px solid ${done?"#1a3028":current?"#1a3a5a":"#1e2d3d"}`}}>
                       {done?"✓ ":""}{"name" in s?s.name:`Sheet ${i+1}`}
                     </div>
@@ -1693,7 +1693,7 @@ export default function App() {
                 style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
                 <div style={{fontSize:14,fontWeight:600,color:"#ffffff",marginBottom:3}}>{label}</div>
                 <div style={{fontSize:12,color:"#6ab4d0",marginBottom:3}}>{desc}</div>
-                <div style={{fontSize:11,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>{cols}</div>
+                <div style={{fontSize:11,color:"#8a9aaa",fontFamily:"'DM Mono', monospace"}}>{cols}</div>
               </button>
             ))}
             <button onClick={()=>setShowMatchExport(false)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",width:"100%",marginTop:4}}>Cancel</button>
@@ -1731,16 +1731,16 @@ export default function App() {
             <button onClick={()=>setShowAudit(false)} style={{background:"none",border:"none",color:"#b0bec5",cursor:"pointer",fontSize:18}}>×</button>
           </div>
           {auditLog.length===0?(
-            <div style={{fontSize:13,color:"#6a8090"}}>No actions logged this session.</div>
+            <div style={{fontSize:13,color:"#8a9aaa"}}>No actions logged this session.</div>
           ):(
             auditLog.map(entry=>(
               <div key={entry.id} style={{borderTop:"1px solid #141c24",paddingTop:10,marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
                   <span style={{...S.tag(entry.action==="DELETE"||entry.action==="BULK DELETE"?"#ff8a8a":entry.action==="ADD"||entry.action==="BULK IMPORT"?"#2dd4a0":"#ffd166")}}>{entry.action}</span>
-                  <span style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#6a8090"}}>{entry.time}</span>
+                  <span style={{fontFamily:"'DM Mono', monospace",fontSize:10,color:"#8a9aaa"}}>{entry.time}</span>
                 </div>
                 <div style={{fontSize:12,color:"#b0bec5",marginBottom:2}}>{entry.detail}</div>
-                <div style={{fontSize:11,color:"#6a8090"}}>{entry.user}</div>
+                <div style={{fontSize:11,color:"#8a9aaa"}}>{entry.user}</div>
               </div>
             ))
           )}
@@ -1783,10 +1783,7 @@ export default function App() {
           <span style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,letterSpacing:"-0.3px"}}>
             <span style={{fontWeight:700,color:"#ffffff"}}>Pair</span><span style={{fontWeight:300,color:"#4db882"}}>Path</span>
           </span>
-          {false&&<button onClick={()=>setAppMode(m=>m==="solo"?"national":"solo")}
-            style={{...S.tag(appMode==="national"?"#6ab4d0":"#3d8c6e"),cursor:"pointer",border:"none",background:appMode==="national"?"#6ab4d022":"#3d8c6e22"}}>
-            {appMode.toUpperCase()}
-          </button>}
+
           <button onClick={()=>setDemoMode(m=>!m)}
             style={{...S.tag(demoMode?"#ffd166":"#7a90a0"),cursor:"pointer",border:`1px solid ${demoMode?"#ffd16644":"#2a3a4a"}`,background:demoMode?"#2a1e0022":"transparent",fontSize:10,padding:"2px 8px"}}>
             {demoMode?"● DEMO":"DEMO"}
@@ -1808,7 +1805,7 @@ export default function App() {
           {!isAdmin&&hasCentreDomain&&<span style={{...S.tag("#6ab4d0"),fontSize:10}} title={`Sharing data with all @${userDomain} users`}>@{userDomain}</span>}
           {!isAdmin&&!hasCentreDomain&&!demoMode&&<span style={{...S.tag("#90a4b4"),fontSize:10}}>Personal</span>}
           {isAdmin&&<button onClick={()=>setShowAudit(v=>!v)} style={{...S.btn,padding:"4px 10px",background:showAudit?"#0f2d1e":"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:11}}>Audit</button>}
-          {userMeta.centre&&<span style={S.tag("#3d5060")}>{userMeta.centre}</span>}
+          {userMeta.centre&&<span style={S.tag("#7a90a4")}>{userMeta.centre}</span>}
           <div style={{width:7,height:7,borderRadius:"50%",background:"#4db882"}}/>
           <span style={{fontFamily:"'DM Mono', monospace",fontSize:11,color:"#4db882"}}>{activePairs.length} ACTIVE</span>
           {session&&<button onClick={()=>supabase.auth.signOut()} style={{...S.btn,padding:"5px 12px",background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:12}}>Sign Out</button>}
@@ -1837,7 +1834,7 @@ export default function App() {
             </div>
           </div>
           {activePairs.filter(p=>p.donor_blood_type).length===0?(
-            <div style={{textAlign:"center",padding:80,color:"#5a6a7a"}}>
+            <div style={{textAlign:"center",padding:80,color:"#8a9aaa"}}>
               <div style={{fontSize:13,marginBottom:16}}>No active pairs with donors yet</div>
               <button onClick={()=>setView("add")} style={{...S.btn,background:"#1a6b45",color:"#ffffff"}}>Register First Pair</button>
             </div>
@@ -1898,7 +1895,7 @@ export default function App() {
               </table>
             </div>
           )}
-          <p style={{marginTop:10,fontSize:11,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>
+          <p style={{marginTop:10,fontSize:11,color:"#8a9aaa",fontFamily:"'DM Mono', monospace"}}>
             MM = HLA mismatches · ABO = blood type only · ALT = altruistic donor · All matches require crossmatch confirmation
           </p>
         </div>
@@ -1945,7 +1942,7 @@ export default function App() {
               <option value="all">All Types</option>
               {PAIR_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-            {centres.length>0&&(
+{centres.length>0&&(
               <select value={filterCentre} onChange={e=>setFilterCentre(e.target.value)} style={{...S.select,width:150}}>
                 <option value="all">All Centres</option>
                 {centres.map(c=><option key={c}>{c}</option>)}
@@ -1958,7 +1955,7 @@ export default function App() {
             <span style={{fontSize:11,color:"#90a4b4",fontFamily:"'DM Mono', monospace",marginRight:4}}>SORT BY</span>
             {sortStack.map((s,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",background:"#131c26",border:"1px solid #1e2d3d",borderRadius:6}}>
-                {i>0&&<span style={{fontSize:10,color:"#6a8090",marginRight:4}}>then</span>}
+                {i>0&&<span style={{fontSize:10,color:"#8a9aaa",marginRight:4}}>then</span>}
                 <select value={s.key} onChange={e=>{const ns=[...sortStack];ns[i]={...ns[i],key:e.target.value};setSortStack(ns);}}
                   style={{...S.select,width:170,fontSize:11,padding:"3px 6px",border:"none",background:"transparent"}}>
                   <option value="date">Date Added</option>
@@ -2005,7 +2002,7 @@ export default function App() {
           </div>
 
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {filteredPairs.length===0&&<div style={{textAlign:"center",padding:40,color:"#5a6a7a",fontSize:13}}>No entries match your filters</div>}
+            {filteredPairs.length===0&&<div style={{textAlign:"center",padding:40,color:"#8a9aaa",fontSize:13}}>No entries match your filters</div>}
             {filteredPairs.map(pair=>{
               const pairDomain=pair.user_email?pair.user_email.split("@")[1]?.toLowerCase():"";
               const canEdit=isAdmin||(hasCentreDomain&&pairDomain===userDomain)||pair.user_id===currentUserId;
@@ -2033,6 +2030,7 @@ export default function App() {
                   {canEdit&&<input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(pair.id)} style={{cursor:"pointer",width:16,height:16,flexShrink:0}}/>}
                   {!canEdit&&<div style={{width:16,height:16,flexShrink:0}}/>}
                   <span style={S.tag("#7a90a0")}>{pairTypeLabel(pair.pair_type)}</span>
+
                   <div style={{flex:1,minWidth:180}}>
                     {pair.recipient_name&&(
                       <>
@@ -2062,7 +2060,7 @@ export default function App() {
                     {/* Sibling donors for same recipient */}
                     {siblingDonors.length>0&&(
                       <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #141c24"}}>
-                        <div style={{fontSize:10,color:"#6a8090",fontFamily:"'DM Mono', monospace",marginBottom:4}}>ALSO WILLING TO DONATE</div>
+                        <div style={{fontSize:10,color:"#8a9aaa",fontFamily:"'DM Mono', monospace",marginBottom:4}}>ALSO WILLING TO DONATE</div>
                         {siblingDonors.map(sd=>{
                           const sdResult=sd.donor_blood_type&&pair.recipient_blood_type?calculateCompatibility(sd,pair):null;
                           const sdStyle=sdResult?scoreStyle(sdResult.score,sdResult.aboOnly):null;
@@ -2095,7 +2093,7 @@ export default function App() {
                       style={{...S.select,width:170,fontSize:12,opacity:canEdit?1:0.4,cursor:canEdit?"pointer":"not-allowed"}}>
                       {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
                     </select>
-                    {!canEdit&&appMode==="national"&&<span style={{fontSize:10,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>READ ONLY</span>}
+                    {!canEdit&&appMode==="national"&&<span style={{fontSize:10,color:"#8a9aaa",fontFamily:"'DM Mono', monospace"}}>READ ONLY</span>}
                     {canEdit&&(
                       <>
                         <button onClick={()=>startEdit(pair)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",padding:"6px 12px"}}>Edit</button>
@@ -2103,7 +2101,7 @@ export default function App() {
                       </>
                     )}
                   </div>
-                  {pair.notes&&<div style={{width:"100%",fontSize:12,color:"#5a6a7a",borderTop:"1px solid #141c24",paddingTop:8,marginTop:4}}>📝 {pair.notes}</div>}
+                  {pair.notes&&<div style={{width:"100%",fontSize:12,color:"#8a9aaa",borderTop:"1px solid #141c24",paddingTop:8,marginTop:4}}>📝 {pair.notes}</div>}
                 </div>
               );
             })}
@@ -2119,7 +2117,7 @@ export default function App() {
           {chainsLoading?(
             <div style={{textAlign:"center",padding:60,color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
           ):chains.length===0?(
-            <div style={{textAlign:"center",padding:60,color:"#5a6a7a",fontSize:13}}>
+            <div style={{textAlign:"center",padding:60,color:"#8a9aaa",fontSize:13}}>
               No compatible chains found yet — add incompatible pairs to identify exchange opportunities
             </div>
           ):(
@@ -2145,7 +2143,7 @@ export default function App() {
                               <span style={{fontSize:10,color:"#4db882",marginLeft:4}}>({link.donorBlood})</span>
                               {link.altruistic&&<span style={{fontSize:9,color:"#ffd166",marginLeft:4}}>ALT</span>}
                             </div>
-                            <div style={{fontSize:10,color:"#5a6a7a",margin:"4px 0",textAlign:"center"}}>donates to</div>
+                            <div style={{fontSize:10,color:"#8a9aaa",margin:"4px 0",textAlign:"center"}}>donates to</div>
                             <div style={{fontSize:12,fontWeight:600,color:"#6ad0a0"}}>
                               {link.recipientName?.split(" ")[0]||"—"}
                               <span style={{fontSize:10,color:"#4db882",marginLeft:4}}>({link.recipientBlood})</span>
@@ -2158,7 +2156,7 @@ export default function App() {
                         </div>
                       );
                     })}
-                    <div style={{padding:"0 8px",color:"#3d5060",fontSize:20}}>↩</div>
+                    <div style={{padding:"0 8px",color:"#7a90a4",fontSize:20}}>↩</div>
                   </div>
                 </div>
               ))}
@@ -2180,7 +2178,7 @@ export default function App() {
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
               {label:"Completed",value:stats.completed,color:"#6ab4d0"},
-              {label:"Withdrawn",value:stats.withdrawn,color:"#5a6a7a"},
+              {label:"Withdrawn",value:stats.withdrawn,color:"#8a9aaa"},
               {label:"2-Way Chains",value:stats.chains2,color:"#4db882"},
               {label:"3-Way Chains",value:stats.chains3,color:"#6ab4d0"},
               {label:"4+ Way Chains",value:stats.chainsLong,color:"#ffd166"},
@@ -2201,7 +2199,7 @@ export default function App() {
                   <div key={bt} style={{marginBottom:10}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:12}}>
                       <span style={{color:"#b0bec5"}}>Type {bt}</span>
-                      <span style={{fontFamily:"'DM Mono', monospace",color:"#ffffff"}}>{count} <span style={{color:"#5a6a7a"}}>({pct}%)</span></span>
+                      <span style={{fontFamily:"'DM Mono', monospace",color:"#ffffff"}}>{count} <span style={{color:"#8a9aaa"}}>({pct}%)</span></span>
                     </div>
                     <div style={{height:5,background:"#1e2d3d",borderRadius:2}}>
                       <div style={{height:"100%",width:`${pct}%`,background:"#2dd4a0",borderRadius:2}}/>
@@ -2236,7 +2234,7 @@ export default function App() {
                 <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12}}>
                   <span style={{color:"#c8d4dc"}}>{p.recipient_name||p.donor_name}</span>
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                    <span style={{color:"#6a8090",fontFamily:"'DM Mono', monospace",fontSize:11}}>
+                    <span style={{color:"#8a9aaa",fontFamily:"'DM Mono', monospace",fontSize:11}}>
                       {p.created_at?new Date(p.created_at).toLocaleDateString():""}
                     </span>
                   </div>
@@ -2281,8 +2279,9 @@ export default function App() {
           const {recip,best,waitlistDays}=rm;
           if(!best) return "No compatible donor found in current registry.";
           const pra=parseFloat(recip.recipient_pra_percent||0);
+          const _sdWt=v=>{const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,"")));return(!isNaN(n)&&n>0&&n<400)?n:null;};
           const weightDiff=best.donor.donor_weight_kg&&recip.recipient_weight_kg
-            ?Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg)):null;
+            ?Math.abs((_sdWt(best.donor.donor_weight_kg)||0)-(_sdWt(recip.recipient_weight_kg)||0)):null;
           const ageDiff=best.result.reasons.ageDiff;
           const parts=[];
           if(pra>80) parts.push("Highly sensitized — rare compatible match");
@@ -2358,14 +2357,17 @@ export default function App() {
                         <div style={{fontSize:10,color:"#4db882",fontFamily:"'DM Mono', monospace",marginBottom:6}}>BEST COMPATIBLE DONOR</div>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
                           <span style={{fontSize:14,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
-                          <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
+                          <span style={S.tag("#7a90a4")}>{best.donor.donor_blood_type}</span>
                           {best.donor.donor_priority&&<span style={{...S.tag({Primary:"#2dd4a0",Secondary:"#6ab4d0",Tertiary:"#ffd166"}[best.donor.donor_priority]||"#90a4b4"),fontSize:9}}>{best.donor.donor_priority}</span>}
                         </div>
                         <div style={{fontSize:12,color:"#b0bec5",marginBottom:8,display:"flex",gap:10,flexWrap:"wrap"}}>
                           {dAge&&<span>Age {dAge}</span>}
                           {best.donor.donor_egfr&&<span>eGFR {best.donor.donor_egfr}</span>}
-                          {best.donor.donor_weight_kg&&recip.recipient_weight_kg&&
-                            <span>{Math.abs(parseFloat(best.donor.donor_weight_kg)-parseFloat(recip.recipient_weight_kg))}kg size diff</span>}
+                          {best.donor.donor_weight_kg&&recip.recipient_weight_kg&&(()=>{
+                            const sd=v=>{const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,"")));return(!isNaN(n)&&n>0&&n<400)?n:null;};
+                            const diff=Math.abs((sd(best.donor.donor_weight_kg)||0)-(sd(recip.recipient_weight_kg)||0));
+                            return <span>{diff}kg size diff</span>;
+                          })()}
                         </div>
                         {/* Narrative */}
                         <div style={{fontSize:12,color:"#6ab4d0",fontStyle:"italic",marginBottom:allMatches.length>1?8:0}}>
@@ -2373,7 +2375,7 @@ export default function App() {
                         </div>
                         {/* Other compatible donors */}
                         {allMatches.length>1&&(
-                          <div style={{fontSize:11,color:"#6a8090",marginTop:4}}>
+                          <div style={{fontSize:11,color:"#8a9aaa",marginTop:4}}>
                             +{allMatches.length-1} other compatible donor{allMatches.length>2?"s":""}: {allMatches.slice(1,3).map(m=>m.donor.donor_name?.split(" ")[0]).join(", ")}
                             {allMatches.length>3?` +${allMatches.length-3} more`:""}
                           </div>
@@ -2389,7 +2391,7 @@ export default function App() {
               })}
             </div>
             {recipientMatches.length===0&&(
-              <div style={{textAlign:"center",padding:60,color:"#6a8090"}}>
+              <div style={{textAlign:"center",padding:60,color:"#8a9aaa"}}>
                 No active recipients in the registry yet.
               </div>
             )}
@@ -2529,7 +2531,7 @@ export default function App() {
                   </div>
                   <div style={{borderTop:"1px solid #1e2d3d",paddingTop:12}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#6a8090"}}>(optional)</span></label>
+                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#8a9aaa"}}>(optional)</span></label>
                       <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
                         {showHLAAdvanced?"▲ hide":"▼ individual fields"}
                       </button>
@@ -2595,7 +2597,7 @@ export default function App() {
                   </div>
                   <div style={{borderTop:"1px solid #1e2d3d",paddingTop:12}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#6a8090"}}>(optional)</span></label>
+                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#8a9aaa"}}>(optional)</span></label>
                       <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono', monospace"}}>
                         {showHLAAdvanced?"▲ hide":"▼ individual fields"}
                       </button>
@@ -2629,7 +2631,7 @@ export default function App() {
                         </button>
                       ))}
                     </div>
-                    <div style={{fontSize:11,color:"#6a8090",marginTop:5}}>
+                    <div style={{fontSize:11,color:"#8a9aaa",marginTop:5}}>
                       {form.donor_priority==="Primary"&&"First-choice donor for this recipient — evaluated first in matching"}
                       {form.donor_priority==="Secondary"&&"Second-choice donor — evaluated if primary doesn't match"}
                       {form.donor_priority==="Tertiary"&&"Third-choice donor — fallback option if primary and secondary don't match"}
@@ -2699,9 +2701,10 @@ export default function App() {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:20}}>
               {[
                 {label:"ABO Compatibility",value:result.reasons.abo?"Compatible ✓":"Incompatible ✗",ok:result.reasons.abo,detail:`${donor.donor_blood_type} → ${recipient.recipient_blood_type}`},
+                {label:"Blood Type Efficiency",value:result.reasons.oToO?"O→O Ideal Match ✓":result.reasons.exactBloodMatch?"Exact Match ✓":result.reasons.suboptimalOUse?"O donor → non-O recipient":"Standard",ok:result.reasons.oToO||result.reasons.exactBloodMatch,warn:result.reasons.suboptimalOUse,detail:result.reasons.oToO?"O donors can only go to O recipients — this is the highest-efficiency pairing":result.reasons.suboptimalOUse?"This O donor could donate to any blood type — consider whether an O recipient exists in the chain":result.reasons.exactBloodMatch?"Donor and recipient share blood type — preserves chain efficiency":"Compatible — no efficiency concern"},
                 {label:"HLA Mismatches",value:result.aboOnly?"Not entered":result.reasons.hlaMismatches+" / 6",ok:!result.aboOnly&&result.reasons.hlaMismatches<=2,warn:!result.aboOnly&&result.reasons.hlaMismatches<=4,detail:result.aboOnly?"Enter HLA alleles for a Pair Score":"0 = perfect match · 6 = full mismatch · drives 60% of score"},
                 {label:"PRA Sensitization",value:`${recipient.recipient_pra_percent||"?"}%`,ok:result.reasons.highSensitization,warn:result.reasons.moderatePRA,detail:result.reasons.highSensitization?"Highly sensitized — match earns highest PRA bonus":result.reasons.moderatePRA?"Moderately sensitized — partial bonus if matched":"Low sensitization"},
-                {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:`Donor ${donor.donor_weight_kg||"?"}kg → Recipient ${recipient.recipient_weight_kg||"?"}kg · >20kg gap flagged`},
+                {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:(()=>{const sd=v=>{const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,"")));return(!isNaN(n)&&n>0&&n<400)?n:null;};const dw=sd(donor.donor_weight_kg),rw=sd(recipient.recipient_weight_kg);return `Donor ${dw!=null?dw+"kg":"?"}  → Recipient ${rw!=null?rw+"kg":"?"} · >20kg gap flagged`;})()},
                 {label:"CMV Risk",value:result.reasons.cmvRisk?"D+/R− Risk":"Acceptable",ok:!result.reasons.cmvRisk,detail:`Donor ${donor.donor_cmv||"?"} / Recipient ${recipient.recipient_cmv||"?"} · D+/R− increases recipient risk`},
                 {label:"Age Gap",value:dAge&&rAge?`${result.reasons.ageDiff} yrs`:"Unknown",ok:!result.reasons.ageFlag,detail:`Donor ${dAge||"?"}y · Recipient ${rAge||"?"}y · >15yr gap flagged`},
                 {label:"Donor eGFR",value:donor.donor_egfr?`${donor.donor_egfr} mL/min`:"Not recorded",ok:(donor.donor_egfr||0)>=60,detail:(donor.donor_egfr||0)>=60?"Adequate renal function":"Below 60 — review required"},
@@ -2712,7 +2715,7 @@ export default function App() {
                     <span style={{fontSize:12,color:"#b0bec5"}}>{label}</span>
                     <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:ok?"#2dd4a0":warn?"#ffd166":"#ff8a8a"}}>{value}</span>
                   </div>
-                  <div style={{fontSize:11,color:"#5a6a7a",marginTop:5}}>{detail}</div>
+                  <div style={{fontSize:11,color:"#8a9aaa",marginTop:5}}>{detail}</div>
                 </div>
               ))}
             </div>
