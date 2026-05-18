@@ -8,7 +8,7 @@ document.head.appendChild(fontLink);
 
 // ── Matching Engine ────────────────────────────────────────────────────────
 const ABO_COMPATIBLE = { O:["O","A","B","AB"], A:["A","AB"], B:["B","AB"], AB:["AB"] };
-function calcAge(y) { return y ? new Date().getFullYear() - parseInt(y) : null; }
+function calcAge(y) { if(!y) return null; const yr=parseInt(y); return (yr>=1900&&yr<=new Date().getFullYear())?new Date().getFullYear()-yr:null; }
 function checkABO(d, r) { return ABO_COMPATIBLE[d]?.includes(r) ?? false; }
 
 function countHLAMismatches(donor, recipient) {
@@ -82,8 +82,9 @@ function calculateCompatibility(donor, recipient) {
     };
   }
   if (!hasHLA) {
-    // ABO compatible but no HLA — return a capped score so grid stays colorful
-    const aboScore = Math.max(0, Math.min(100, 70 + bloodBonus - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0) - (ageFlag ? 3 : 0)));
+    // ABO compatible but no HLA — cap at 70 so coordinators know scores above 70 mean HLA was entered.
+    // Blood type bonus intentionally excluded here — it only applies when full data is present.
+    const aboScore = Math.min(70, Math.max(0, 70 - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0) - (ageFlag ? 3 : 0)));
     return {
       compatible: true, score: aboScore, aboOnly: true,
       reasons: { abo: true, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra, oToO, exactBloodMatch, suboptimalOUse }
@@ -456,9 +457,9 @@ function parseYearFromAny(val) {
   // Handles: YYYY, MM/DD/YYYY, YYYY-MM-DD, Excel serial (40000-60000), full ISO datetime
   if (!val) return val;
   const s = String(val).trim();
-  // Excel serial date (e.g. 27505 or 45123)
+  // Excel serial date — covers full range including birth years back to 1900 (serial ~1)
   const n = parseFloat(s);
-  if (!isNaN(n) && n > 10000 && n < 60000) {
+  if (!isNaN(n) && n > 1 && n < 60000) {
     const date = new Date((n - 25569) * 86400000);
     return String(date.getUTCFullYear());
   }
@@ -821,12 +822,7 @@ function AuthScreen({onDemoMode}) {
                   <button onClick={agreed?onDemoMode:null} style={{background:"none",border:"1px solid #1e3448",borderRadius:7,padding:"10px",color:agreed?"#1e3448":"#9aabb8",fontSize:13,fontWeight:600,cursor:agreed?"pointer":"not-allowed",width:"100%",fontFamily:"'DM Sans', sans-serif",opacity:agreed?1:0.5,transition:"all 0.2s"}}>
                     Explore Demo Mode
                   </button>
-                  <div style={{background:"#f7f9fb",borderRadius:7,padding:"10px 12px",border:"1px solid #e4eaf0"}}>
-                    <div style={{fontFamily:"'DM Mono', monospace",fontSize:9,color:"#1a6b45",letterSpacing:"0.1em",marginBottom:4}}>PRIVACY BY DESIGN</div>
-                    <div style={{fontSize:11,color:"#4a6070",lineHeight:1.6}}>
-                      Demo data is never saved — nothing you enter here is stored. In live use, PairPath's built-in de-identification tools convert real names to anonymous IDs <span style={{fontWeight:600,color:"#1e3448"}}>(D1, R1)</span> before anything is uploaded. Real patient names stay on your machine and never enter the system.
-                    </div>
-                  </div>
+
                 </>
               )}
             </div>
@@ -1354,7 +1350,9 @@ export default function App() {
     function excelSerialToISO(val){
       if(!val&&val!==0) return val;
       const n=parseFloat(String(val).trim());
-      if(!isNaN(n)&&n>40000&&n<60000){
+      // Excel serial: 1 = Jan 1 1900. Birth years (1900-2010) fall in range ~1–40179.
+      // We accept any positive serial that produces a plausible calendar date.
+      if(!isNaN(n)&&n>1&&n<60000){
         const date=new Date((n-25569)*86400000);
         return date.toISOString().split("T")[0]; // YYYY-MM-DD
       }
@@ -2179,9 +2177,9 @@ export default function App() {
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
               {label:"Completed",value:stats.completed,color:"#6ab4d0"},
               {label:"Withdrawn",value:stats.withdrawn,color:"#8a9aaa"},
-              {label:"2-Way Chains",value:stats.chains2,color:"#4db882"},
-              {label:"3-Way Chains",value:stats.chains3,color:"#6ab4d0"},
-              {label:"4+ Way Chains",value:stats.chainsLong,color:"#ffd166"},
+              {label:"2-Way Matches Found",value:stats.chains2,color:"#4db882"},
+              {label:"3-Way Matches Found",value:stats.chains3,color:"#6ab4d0"},
+              {label:"4+ Way Matches Found",value:stats.chainsLong,color:"#ffd166"},
             ].map(({label,value,color})=>(
               <div key={label} style={{...S.card,textAlign:"center"}}>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:30,fontWeight:500,color,lineHeight:1}}>{value}</div>
