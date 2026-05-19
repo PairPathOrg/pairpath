@@ -835,7 +835,7 @@ function AuthScreen({onDemoMode}) {
         </div>
       </div>
 
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@media(max-width:768px){.pp-left{display:none!important}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}@keyframes ppPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.3)}}@media(max-width:768px){.pp-left{display:none!important}}`}</style>
     </div>
   );
 }
@@ -975,6 +975,18 @@ export default function App() {
   const [auditLog,setAuditLog]=useState([]);
   const [showAudit,setShowAudit]=useState(false);
   const [chainsLoading,setChainsLoading]=useState(false);
+  const [showWelcome,setShowWelcome]=useState(false);
+  const [visitedTabs,setVisitedTabs]=useState(()=>new Set(["grid"]));
+  const [hintDismissed,setHintDismissed]=useState(false);
+
+  const DEMO_HINTS={
+    grid:"You're looking at the Compatibility Grid — each cell shows how well a donor and recipient pair. Click any colored cell to see a full breakdown including blood type, PRA sensitization, and size compatibility.",
+    registry:"This is the Registry — every donor-recipient pair in the system. Use the filters to sort by blood type, pair type, or centre. Click any row to view or edit details.",
+    matches:"The Matches view shows the best compatible donor for each recipient, ranked by Pair Score. Click a score to see the full compatibility report.",
+    chains:"Chains shows viable kidney exchange sequences — two or more incompatible pairs who can swap donors so everyone gets a transplant. Longer chains mean more lives saved.",
+    dashboard:"The Dashboard gives you a snapshot of your registry — active pairs, match rates, blood type distribution, and how many exchange chains are available right now.",
+    add:"Use this form to add a new pair to the registry. You can enter an incompatible donor-recipient pair, an altruistic donor, or a recipient-only entry. You can also bulk-upload from a CSV or Excel file.",
+  };
   const [computedChains,setComputedChains]=useState([]);
   const fileRef=useRef();
   const pendingFile=useRef(null);
@@ -1021,6 +1033,10 @@ export default function App() {
 
   useEffect(()=>{
     if(!session) return;
+    // Show welcome modal on first login — flag stored in auth metadata so it's per-user, not per-device
+    if(!session.user?.user_metadata?.has_seen_welcome){
+      setShowWelcome(true);
+    }
     supabase.from("pairs").select("*").order("created_at",{ascending:false}).then(({data})=>{if(data)setPairs(data);});
     const ch=supabase.channel("pp").on("postgres_changes",{event:"*",schema:"public",table:"pairs"},p=>{
       if(p.eventType==="INSERT") setPairs(prev=>[p.new,...prev]);
@@ -1073,6 +1089,13 @@ export default function App() {
   // Demo mode overlays fake data. National shows everything (hidden for now).
   const visiblePairs=demoMode?DEMO_PAIRS:(appMode==="national"?pairs:(isAdmin?pairs:sameDomainPairs));
   const activePairs=visiblePairs.filter(p=>p.status==="active"||p.status==="active");
+
+  async function dismissWelcome(goToAdd=false){
+    setShowWelcome(false);
+    if(goToAdd) setView("add");
+    // Persist flag to auth metadata so modal never shows again for this user
+    await supabase.auth.updateUser({data:{has_seen_welcome:true}});
+  }
 
   function addAudit(action,detail){
     if(demoMode) return;
@@ -1794,7 +1817,12 @@ export default function App() {
         </div>
         <nav style={{display:"flex",gap:2}}>
           {[["grid","Grid"],["registry","Registry"],["matches","Matches"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l])=>(
-            <button key={v} onClick={()=>{setView(v);setEditingPair(null);if(v==="add")setForm(emptyForm);}} style={S.navBtn(view===v)}>{l}</button>
+            <button key={v} onClick={()=>{setView(v);setEditingPair(null);if(v==="add")setForm(emptyForm);setVisitedTabs(s=>{const n=new Set(s);n.add(v);return n;});}} style={{...S.navBtn(view===v),position:"relative"}}>
+              {l}
+              {demoMode&&!visitedTabs.has(v)&&(
+                <span style={{position:"absolute",top:3,right:3,width:6,height:6,borderRadius:"50%",background:"#4db882",boxShadow:"0 0 5px #4db882",animation:"ppPulse 1.5s ease-in-out infinite"}}/>
+              )}
+            </button>
           ))}
         </nav>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
@@ -1810,6 +1838,78 @@ export default function App() {
           {!session&&demoMode&&<button onClick={()=>setDemoMode(false)} style={{...S.btn,padding:"5px 12px",background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",fontSize:12}}>Exit Demo</button>}
         </div>
       </header>
+
+      {/* First-time welcome modal */}
+      {showWelcome&&!demoMode&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div style={{background:"#0f1c2a",border:"1px solid rgba(77,184,130,0.3)",borderRadius:12,padding:"36px 40px",maxWidth:520,width:"100%",boxShadow:"0 24px 80px rgba(0,0,0,0.5)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+              <LogoMark size={36}/>
+              <div>
+                <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:22,fontWeight:700,letterSpacing:"-0.3px"}}>
+                  <span style={{color:"#ffffff"}}>Welcome to </span><span style={{color:"#4db882",fontWeight:300}}>PairPath</span>
+                </div>
+                <div style={{fontSize:12,color:"#8a9aaa",marginTop:2}}>Kidney paired donation registry</div>
+              </div>
+            </div>
+
+            <div style={{fontSize:14,color:"rgba(255,255,255,0.8)",lineHeight:1.7,marginBottom:24}}>
+              PairPath helps you identify compatible kidney exchange pairs and build donation chains — all in one place, at no cost.
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:28}}>
+              {[
+                ["1","Add your pairs","Use the Add tab to enter incompatible donor-recipient pairs, altruistic donors, or recipient-only entries — or bulk upload from a CSV or Excel file."],
+                ["2","Check compatibility","The Grid and Matches tabs show you who's compatible with whom, ranked by Pair Score."],
+                ["3","Find exchange chains","The Chains tab identifies viable kidney exchange sequences across your registry."],
+              ].map(([n,title,desc])=>(
+                <div key={n} style={{display:"flex",gap:14,padding:"12px 14px",background:"rgba(77,184,130,0.06)",borderRadius:8,border:"1px solid rgba(77,184,130,0.12)"}}>
+                  <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#4db882",fontWeight:600,flexShrink:0,minWidth:16}}>{n}</div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#ffffff",marginBottom:3}}>{title}</div>
+                    <div style={{fontSize:12,color:"#8a9aaa",lineHeight:1.55}}>{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>dismissWelcome(true)} style={{flex:1,padding:"11px 0",background:"#4db882",border:"none",borderRadius:7,color:"#0a1628",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans', sans-serif"}}>
+                Add My First Pair →
+              </button>
+              <button onClick={()=>dismissWelcome(false)} style={{padding:"11px 20px",background:"transparent",border:"1px solid #2a3d52",borderRadius:7,color:"#8a9aaa",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans', sans-serif"}}>
+                Explore first
+              </button>
+            </div>
+
+            <div style={{marginTop:16,fontSize:11,color:"#4a6a5a",textAlign:"center",lineHeight:1.5}}>
+              Real patient names never leave your computer — PairPath only stores anonymous identifiers like D1 and R1.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating help button — reopens welcome modal */}
+      {!demoMode&&(
+        <button
+          onClick={()=>setShowWelcome(true)}
+          title="How to use PairPath"
+          style={{position:"fixed",bottom:24,right:24,zIndex:900,width:38,height:38,borderRadius:"50%",background:"#0f1c2a",border:"1px solid rgba(77,184,130,0.25)",color:"#4db882",fontSize:17,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 16px rgba(0,0,0,0.4)",transition:"border-color 0.2s,box-shadow 0.2s",fontFamily:"'DM Sans', sans-serif",lineHeight:1}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(77,184,130,0.6)";e.currentTarget.style.boxShadow="0 4px 20px rgba(77,184,130,0.2)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(77,184,130,0.25)";e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.4)";}}
+        >?</button>
+      )}
+
+      {/* Demo hint bar */}
+      {demoMode&&!hintDismissed&&DEMO_HINTS[view]&&(
+        <div style={{background:"rgba(77,184,130,0.08)",borderBottom:"1px solid rgba(77,184,130,0.15)",padding:"10px 32px",display:"flex",alignItems:"center",gap:12,justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
+            <span style={{fontFamily:"'DM Mono', monospace",fontSize:9,color:"#4db882",letterSpacing:"0.1em",flexShrink:0}}>DEMO GUIDE</span>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.75)",lineHeight:1.55}}>{DEMO_HINTS[view]}</span>
+          </div>
+          <button onClick={()=>setHintDismissed(true)} style={{background:"none",border:"none",color:"#4a6a5a",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px",flexShrink:0}} title="Dismiss hints">×</button>
+        </div>
+      )}
 
       {/* Grid */}
       {view==="grid"&&(
