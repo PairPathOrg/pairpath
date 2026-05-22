@@ -348,7 +348,7 @@ function exportMatchCards(pairs) {
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div>
               <span style="font-size:14px;font-weight:600;color:#222">${best.donor.donor_name||"—"}</span>
-              <span style="font-size:12px;color:#666;margin-left:8px">· ${best.donor.donor_blood_type||"?"}${best.donor.donor_egfr?` · eGFR ${best.donor.donor_egfr}`:""}${weightDiff!=null?` · ${weightDiff}kg size diff`:""}</span>
+              <span style="font-size:12px;color:#666;margin-left:8px">· ${best.donor.donor_blood_type||"?"}${weightDiff!=null?` · ${weightDiff}kg size diff`:""}</span>
             </div>
             ${matches.length>1?`<span style="font-size:11px;color:#888">+${matches.length-1} other compatible donor${matches.length>2?"s":""}</span>`:""}
           </div>
@@ -980,9 +980,9 @@ export default function App() {
   const [hintDismissed,setHintDismissed]=useState(false);
 
   const DEMO_HINTS={
-    grid:"You're looking at the Compatibility Grid — each cell shows how well a donor and recipient pair. Click any colored cell to see a full breakdown including blood type, PRA sensitization, and size compatibility.",
-    registry:"This is the Registry — every donor-recipient pair in the system. Use the filters to sort by blood type, pair type, or centre. Click any row to view or edit details.",
-    matches:"The Matches view shows the best compatible donor for each recipient, ranked by Pair Score. Click a score to see the full compatibility report.",
+    grid:"You're looking at the Compatibility Grid — each cell shows how well a donor and recipient pair. Click any colored cell to see a full breakdown including blood type, PRA sensitization, and size compatibility. Click any Pair Score to open the full compatibility report.",
+    registry:"This is the Registry — every donor-recipient pair in the system. Use the filters to sort by blood type, pair type, or center. Click any row to view or edit details.",
+    matches:"The Matches view shows the best compatible donor for each recipient, ranked by Pair Score. Use Export PDF to generate printable match cards for your team.",
     chains:"Chains shows viable kidney exchange sequences — two or more incompatible pairs who can swap donors so everyone gets a transplant. Longer chains mean more lives saved.",
     dashboard:"The Dashboard gives you a snapshot of your registry — active pairs, match rates, blood type distribution, and how many exchange chains are available right now.",
     add:"Use this form to add a new pair to the registry. You can enter an incompatible donor-recipient pair, an altruistic donor, or a recipient-only entry. You can also bulk-upload from a CSV or Excel file.",
@@ -2152,7 +2152,7 @@ export default function App() {
                         Donor: <strong style={{color:"#c8d4dc"}}>{pair.donor_name}</strong>
                         {pair.donor_blood_type?` · ${pair.donor_blood_type}`:""}
                         {dAge?` · Age ${dAge}`:""}
-                        {pair.donor_egfr?` · eGFR ${pair.donor_egfr}`:""}
+
                       </div>
                     )}
                     {/* Sibling donors for same recipient */}
@@ -2460,7 +2460,7 @@ export default function App() {
                         </div>
                         <div style={{fontSize:12,color:"#b0bec5",marginBottom:8,display:"flex",gap:10,flexWrap:"wrap"}}>
                           {dAge&&<span>Age {dAge}</span>}
-                          {best.donor.donor_egfr&&<span>eGFR {best.donor.donor_egfr}</span>}
+
                           {best.donor.donor_weight_kg&&recip.recipient_weight_kg&&(()=>{
                             const sd=v=>{const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,"")));return(!isNaN(n)&&n>0&&n<400)?n:null;};
                             const diff=Math.abs((sd(best.donor.donor_weight_kg)||0)-(sd(recip.recipient_weight_kg)||0));
@@ -2751,7 +2751,7 @@ export default function App() {
                 </div>
               )}
               <div><label style={S.label}>TRANSPLANT CENTER</label>
-                <input value={form.centre||userMeta.centre||""} onChange={e=>setForm(f=>({...f,centre:e.target.value}))} style={S.input} placeholder={userMeta.centre||"Your centre"}/>
+                <input value={form.centre||userMeta.centre||""} onChange={e=>setForm(f=>({...f,centre:e.target.value}))} style={S.input} placeholder={userMeta.centre||"Your center"}/>
               </div>
             </div>
             <div style={{marginTop:12}}>
