@@ -2525,7 +2525,6 @@ export default function App() {
                         <div style={{fontSize:13,color:"#6ab4d0",marginBottom:allMatches.length>1?6:0}}>
                           {matchNarrative({recip,best,waitlistDays})}
                         </div>
-                        </div>
                         {/* Other compatible donors */}
                         {allMatches.length>1&&(
                           <div style={{fontSize:13,color:"#6a8090",marginTop:4}}>
