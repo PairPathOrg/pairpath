@@ -495,6 +495,8 @@ function parseCSV(text, userId) {
 // ── Field Mapping ──────────────────────────────────────────────────────────
 const PAIRPATH_FIELDS = [
   {key:"recipient_name",label:"Recipient Name",required:true,types:["paired","recipient_only"]},
+  {key:"_recip_first",label:"Recipient First Name",required:false,types:["paired","recipient_only"]},
+  {key:"_recip_last",label:"Recipient Last Name",required:false,types:["paired","recipient_only"]},
   {key:"recipient_blood_type",label:"Recipient Blood Type",required:true,types:["paired","recipient_only"]},
   {key:"recipient_year_born",label:"Recipient Year Born",required:false,types:["paired","recipient_only"]},
   {key:"recipient_pra_percent",label:"Recipient PRA %",required:false,types:["paired","recipient_only"]},
@@ -505,6 +507,8 @@ const PAIRPATH_FIELDS = [
   {key:"recipient_dialysis_start",label:"Recipient Waitlist Date",required:false,types:["paired","recipient_only"]},
   {key:"recipient_zip",label:"Recipient ZIP",required:false,types:["paired","recipient_only"]},
   {key:"donor_name",label:"Donor Name",required:true,types:["paired","altruistic"]},
+  {key:"_donor_first",label:"Donor First Name",required:false,types:["paired","altruistic"]},
+  {key:"_donor_last",label:"Donor Last Name",required:false,types:["paired","altruistic"]},
   {key:"donor_blood_type",label:"Donor Blood Type",required:true,types:["paired","altruistic"]},
   {key:"donor_year_born",label:"Donor Year Born",required:false,types:["paired","altruistic"]},
   {key:"donor_weight_kg",label:"Donor Weight (kg)",required:true,types:["paired","altruistic"]},
@@ -527,6 +531,8 @@ function autoDetect(headers, pairType="paired") {
     // Recipient fields — skip if altruistic-only upload
     ...(!isDonorOnly?[
       {keys:["recipient_name","patient_name","pt_name"],field:"recipient_name"},
+      {keys:["recipient_first","recip_first","patient_first","pt_first","first_name","firstname","r_first"],field:"_recip_first"},
+      {keys:["recipient_last","recip_last","patient_last","pt_last","last_name","lastname","surname","r_last"],field:"_recip_last"},
       {keys:["recipient_blood_type","recipient_abo"],field:"recipient_blood_type"},
       {keys:["recipient_pra","pra","pra_percent","pra %"],field:"recipient_pra_percent"},
       {keys:["recipient_weight","weight_kg"],field:"recipient_weight_kg"},
@@ -539,6 +545,8 @@ function autoDetect(headers, pairType="paired") {
     // Donor fields — skip if recipient-only upload
     ...(!isRecipOnly?[
       {keys:["donor_name","living_donor"],field:"donor_name"},
+      {keys:["donor_first","ld_first","living_donor_first","d_first"],field:"_donor_first"},
+      {keys:["donor_last","ld_last","living_donor_last","d_last"],field:"_donor_last"},
       {keys:["donor_blood_type","donor_abo"],field:"donor_blood_type"},
       {keys:["donor_egfr","egfr","gfr"],field:"donor_egfr"},
       {keys:["donor_weight"],field:"donor_weight_kg"},
@@ -1447,6 +1455,7 @@ export default function App() {
       if(!obj[k]) return;
       const val=parseFloat(obj[k]);
       if(isNaN(val)) return;
+      if(importHeightUnit==="inches"){ obj[k]=Math.round(val*2.54); return; }
       const shouldConvert = importHeightUnit==="meters" || (importHeightUnit==="auto" && val < 3);
       if(shouldConvert) obj[k]=Math.round(val*100);
       else obj[k]=Math.round(val);
@@ -1459,7 +1468,10 @@ export default function App() {
       if(importWeightUnit==="lbs") obj[k]=Math.round(val*0.453592*10)/10;
       else obj[k]=Math.round(val*10)/10;
     });
-    // Validate blood types
+    // Validate blood types — strip Rh factor (+/-) first so AB+, A-, B+, O- become AB, A, B, O
+    ["donor_blood_type","recipient_blood_type"].forEach(k=>{
+      if(obj[k]!=null) obj[k]=String(obj[k]).toUpperCase().replace(/\s+/g,"").replace(/[+−-]|POS(?:ITIVE)?|NEG(?:ATIVE)?/g,"").trim();
+    });
     if(!["A","B","AB","O"].includes(obj.donor_blood_type)) obj.donor_blood_type=null;
     if(!["A","B","AB","O"].includes(obj.recipient_blood_type)) obj.recipient_blood_type=null;
     // Validate CMV
@@ -1543,6 +1555,18 @@ export default function App() {
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
         });
+        // Concatenate split first/last names if the full name field wasn't mapped
+        const mapped=Object.values(mapping);
+        if(!mapped.includes("recipient_name")){
+          const rn=[obj._recip_first,obj._recip_last].filter(Boolean).join(" ").trim();
+          if(rn) obj.recipient_name=rn;
+        }
+        if(!mapped.includes("donor_name")){
+          const dn=[obj._donor_first,obj._donor_last].filter(Boolean).join(" ").trim();
+          if(dn) obj.donor_name=dn;
+        }
+        delete obj._recip_first; delete obj._recip_last;
+        delete obj._donor_first; delete obj._donor_last;
         return cleanImportRow(obj, importHeightUnit, importWeightUnit);
       });
     }
@@ -1571,7 +1595,8 @@ export default function App() {
           return updated;
         });
         addAudit("BULK IMPORT",`Sheet "${sheetContext.name}": imported ${data?.length??0} entries`);
-        // Advance queue — remove first sheet        setXlsxSheets(prev=>{
+        // Advance queue — remove first sheet
+        setXlsxSheets(prev=>{
           const remaining=prev.slice(1);
           if(!remaining.length) setXlsxSummaryVisible(true);
           return remaining;
@@ -1645,7 +1670,7 @@ export default function App() {
             <div style={{marginBottom:16,padding:"12px 14px",background:"#1a2535",borderRadius:8,border:"1px solid #2a3d52"}}>
               <div style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginBottom:8}}>HEIGHT UNIT IN YOUR FILE</div>
               <div style={{display:"flex",gap:8,marginBottom:12}}>
-                {[["meters","Meters (Epic default)"],["cm","Centimeters"],["auto","Auto-detect"]].map(([val,label])=>(
+                {[["meters","Meters (Epic default)"],["cm","Centimeters"],["inches","Inches"],["auto","Auto-detect"]].map(([val,label])=>(
                   <button key={val} onClick={()=>setImportHeightUnit(val)}
                     style={{flex:1,padding:"7px 0",borderRadius:6,border:`1.5px solid ${importHeightUnit===val?"#6ab4d0":"#1e2d3d"}`,
                       background:importHeightUnit===val?"#0d2030":"transparent",
@@ -1730,7 +1755,7 @@ export default function App() {
               <div style={{marginBottom:12,padding:"10px 12px",background:"#1a2535",borderRadius:8,border:"1px solid #2a3d52"}}>
                 <div style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginBottom:6}}>HEIGHT UNIT</div>
                 <div style={{display:"flex",gap:6,marginBottom:8}}>
-                  {[["meters","Meters (Epic)"],["cm","Centimeters"],["auto","Auto"]].map(([val,label])=>(
+                  {[["meters","Meters (Epic)"],["cm","Centimeters"],["inches","Inches"],["auto","Auto"]].map(([val,label])=>(
                     <button key={val} onClick={()=>setImportHeightUnit(val)}
                       style={{flex:1,padding:"5px 0",borderRadius:5,border:`1px solid ${importHeightUnit===val?"#6ab4d0":"#1e2d3d"}`,
                         background:importHeightUnit===val?"#0d2030":"transparent",
