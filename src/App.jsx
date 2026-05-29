@@ -1381,34 +1381,52 @@ export default function App() {
     // Works on RAW header+row arrays BEFORE field mapping. Scan every name-bearing
     // column by its original header, classify donor vs recipient, and replace any
     // value looksLikeRealName accepts with a D#/R# ID. Does NOT rely on mapped keys.
+    // Split first/last columns are combined per row so one person gets ONE ID.
     const donorNames=new Map(), recipNames=new Map();
     let dCount=1, rCount=1;
-    // Identify name columns by header — same predicate looksLikeRealName uses for isNameColumn
-    const nameCols=headers.map((h,i)=>{
+    const idFor=(role,key)=>{
+      const map=role==="donor"?donorNames:recipNames;
+      if(!map.has(key)) map.set(key, role==="donor"?`D${dCount++}`:`R${rCount++}`);
+      return map.get(key);
+    };
+    // Identify name columns by header — same predicate looksLikeRealName uses, plus first/last/surname
+    const cols=headers.map((h,i)=>{
       const hl=String(h).toLowerCase();
       const isName=hl.includes("name")||hl.includes("patient")||hl.includes("donor")||
         hl.includes("recipient")||hl.includes("subject")||hl.includes("ld ")||
-        hl.startsWith("ld")||hl.startsWith("r ")||hl==="r";
+        hl.startsWith("ld")||hl.startsWith("r ")||hl==="r"||
+        hl.includes("first")||hl.includes("last")||hl.includes("surname");
       if(!isName) return null;
       const isDonor=hl.includes("donor")||hl.includes("ld ")||hl.startsWith("ld")||
         hl.startsWith("d ")||hl.startsWith("d_");
-      return {index:i, header:h, role:isDonor?"donor":"recipient"};
+      const part=hl.includes("first")?"first":(hl.includes("last")||hl.includes("surname")?"last":"full");
+      return {index:i, header:h, role:isDonor?"donor":"recipient", part};
     }).filter(Boolean);
+    const fullCols=cols.filter(c=>c.part==="full");
+    const splitCols=cols.filter(c=>c.part!=="full");
     const getVal=(row,i,h)=>Array.isArray(row)?row[i]:row[h];
     const setVal=(row,i,h,v)=>{if(Array.isArray(row)){if(i>=0)row[i]=v;}else row[h]=v;};
     const anonymized=rows.map(row=>{
       const newRow=Array.isArray(row)?[...row]:{...row};
-      nameCols.forEach(({index,header,role})=>{
+      // Full-name columns — one ID per value
+      fullCols.forEach(({index,header,role})=>{
         const val=getVal(row,index,header);
         if(!looksLikeRealName(val, header)) return;
-        const key=String(val).trim();
-        if(role==="donor"){
-          if(!donorNames.has(key)) donorNames.set(key,`D${dCount++}`);
-          setVal(newRow,index,header,donorNames.get(key));
-        }else{
-          if(!recipNames.has(key)) recipNames.set(key,`R${rCount++}`);
-          setVal(newRow,index,header,recipNames.get(key));
-        }
+        setVal(newRow,index,header, idFor(role, String(val).trim()));
+      });
+      // Split first/last columns — combine per role into ONE ID, then blank the extra cells
+      ["donor","recipient"].forEach(role=>{
+        const fCols=splitCols.filter(c=>c.role===role&&c.part==="first");
+        const lCols=splitCols.filter(c=>c.role===role&&c.part==="last");
+        if(!fCols.length&&!lCols.length) return;
+        const firstVal=fCols.map(c=>String(getVal(row,c.index,c.header)??"").trim()).filter(Boolean).join(" ");
+        const lastVal=lCols.map(c=>String(getVal(row,c.index,c.header)??"").trim()).filter(Boolean).join(" ");
+        const combined=[firstVal,lastVal].filter(Boolean).join(" ").trim();
+        // Synthetic header guarantees the name-column gate; value checks do the real work
+        if(!combined||!looksLikeRealName(combined, role==="donor"?"donor_name":"recipient_name")) return;
+        const id=idFor(role, combined);
+        // Put the ID in the first column, blank the rest so concatenation yields just the ID
+        [...fCols,...lCols].forEach((c,k)=> setVal(newRow,c.index,c.header, k===0?id:""));
       });
       return newRow;
     });
