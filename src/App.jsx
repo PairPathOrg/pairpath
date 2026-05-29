@@ -1299,21 +1299,13 @@ export default function App() {
       }
       const buf=await file.arrayBuffer();
       const wb=window.XLSX.read(buf,{type:"array"});
-      let totalAnonymized=0;
       const sheets=wb.SheetNames.map(name=>{
         const ws=wb.Sheets[name];
         const json=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
         if(!json.length) return null;
         const headers=json[0].map(h=>String(h).trim()).filter(Boolean);
         if(!headers.length) return null;
-        let dataRows=json.slice(1).filter(r=>r.some(c=>c!==""));
-        // Name detection — auto-anonymize immediately for every sheet (same as CSV path), no modal/choice
-        const sheetPairType="paired";
-        const flagged=detectRealNames(headers,dataRows);
-        if(flagged.length>0){
-          dataRows=autoAnonymize(headers,dataRows,sheetPairType); // downloads lookup table automatically
-          totalAnonymized+=flagged.length;
-        }
+        const dataRows=json.slice(1).filter(r=>r.some(c=>c!==""));
         const preview=dataRows.slice(0,3).map(row=>{
           const obj={};headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
         });
@@ -1321,10 +1313,23 @@ export default function App() {
         return {name,headers,preview,dataRows,fingerprint};
       }).filter(Boolean);
       if(!sheets.length){setUploadResult({success:false,message:"No data found in workbook."});setUploading(false);return;}
-      if(totalAnonymized>0){
-        setUploadResult({success:true,message:`⚠ ${totalAnonymized} name${totalAnonymized!==1?"s":""} detected across the workbook and auto-anonymized. Your lookup table${sheets.length>1?"s have":" has"} been downloaded — keep ${sheets.length>1?"them":"it"} private.`});
+      // Name detection — auto-anonymize every sheet before opening the mapper (no modal/choice)
+      const cleanedSheets=sheets.map(sheet=>{
+        const flagged=detectRealNames(sheet.headers, sheet.dataRows);
+        if(flagged.length>0){
+          const anonymized=autoAnonymize(sheet.headers, sheet.dataRows, sheet.pairType||"paired");
+          const preview=anonymized.slice(0,3).map(row=>{
+            const obj={};sheet.headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
+          });
+          return {...sheet, dataRows:anonymized, preview, wasAnonymized:true, flagCount:flagged.length};
+        }
+        return sheet;
+      });
+      const totalFlagged=cleanedSheets.filter(s=>s.wasAnonymized).reduce((a,s)=>a+s.flagCount,0);
+      if(totalFlagged>0){
+        setUploadResult({success:true, message:`⚠ ${totalFlagged} name${totalFlagged!==1?"s":""} detected and auto-anonymized. Lookup table downloaded — keep it private.`});
       }
-      setXlsxSheets(sheets);
+      setXlsxSheets(cleanedSheets);
       setXlsxResults([]);
     }catch(err){setUploadResult({success:false,message:"Could not read Excel file: "+err.message});}
     setUploading(false);
