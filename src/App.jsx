@@ -1378,23 +1378,38 @@ export default function App() {
   }
 
   function autoAnonymize(headers, rows, pairType){
-    // Assign D1/D2/R1/R2 IDs, build lookup table
+    // Works on RAW header+row arrays BEFORE field mapping. Scan every name-bearing
+    // column by its original header, classify donor vs recipient, and replace any
+    // value looksLikeRealName accepts with a D#/R# ID. Does NOT rely on mapped keys.
     const donorNames=new Map(), recipNames=new Map();
     let dCount=1, rCount=1;
+    // Identify name columns by header — same predicate looksLikeRealName uses for isNameColumn
+    const nameCols=headers.map((h,i)=>{
+      const hl=String(h).toLowerCase();
+      const isName=hl.includes("name")||hl.includes("patient")||hl.includes("donor")||
+        hl.includes("recipient")||hl.includes("subject")||hl.includes("ld ")||
+        hl.startsWith("ld")||hl.startsWith("r ")||hl==="r";
+      if(!isName) return null;
+      const isDonor=hl.includes("donor")||hl.includes("ld ")||hl.startsWith("ld")||
+        hl.startsWith("d ")||hl.startsWith("d_");
+      return {index:i, header:h, role:isDonor?"donor":"recipient"};
+    }).filter(Boolean);
+    const getVal=(row,i,h)=>Array.isArray(row)?row[i]:row[h];
+    const setVal=(row,i,h,v)=>{if(Array.isArray(row)){if(i>=0)row[i]=v;}else row[h]=v;};
     const anonymized=rows.map(row=>{
       const newRow=Array.isArray(row)?[...row]:{...row};
-      const getName=(field)=>Array.isArray(row)?row[headers.indexOf(field)]:row[field];
-      const setName=(field,val)=>{if(Array.isArray(newRow)){const i=headers.indexOf(field);if(i>=0)newRow[i]=val;}else newRow[field]=val;};
-      const dName=getName("donor_name")||getName(headers.find(h=>h.toLowerCase().includes("donor")&&h.toLowerCase().includes("name"))||"");
-      const rName=getName("recipient_name")||getName(headers.find(h=>h.toLowerCase().includes("recipient")&&h.toLowerCase().includes("name"))||"");
-      if(dName&&looksLikeRealName(dName, "donor_name")){
-        if(!donorNames.has(dName)) donorNames.set(dName,`D${dCount++}`);
-        setName("donor_name",donorNames.get(dName));
-      }
-      if(rName&&looksLikeRealName(rName, "recipient_name")){
-        if(!recipNames.has(rName)) recipNames.set(rName,`R${rCount++}`);
-        setName("recipient_name",recipNames.get(rName));
-      }
+      nameCols.forEach(({index,header,role})=>{
+        const val=getVal(row,index,header);
+        if(!looksLikeRealName(val, header)) return;
+        const key=String(val).trim();
+        if(role==="donor"){
+          if(!donorNames.has(key)) donorNames.set(key,`D${dCount++}`);
+          setVal(newRow,index,header,donorNames.get(key));
+        }else{
+          if(!recipNames.has(key)) recipNames.set(key,`R${rCount++}`);
+          setVal(newRow,index,header,recipNames.get(key));
+        }
+      });
       return newRow;
     });
     // Generate lookup CSV
