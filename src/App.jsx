@@ -586,8 +586,8 @@ function cleanWeight(v) {
   return Math.round(n*10)/10;
 }
 const S = {
-  app: {minHeight:"100vh",background:"#131c26",color:"#ffffff",fontFamily:"'DM Sans', sans-serif",fontSize:14},
-  header: {borderBottom:"1px solid #1e2d3d",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,background:"#0a0f18",gap:12},
+  app: {minHeight:"100vh",width:"100%",background:"#131c26",color:"#ffffff",fontFamily:"'DM Sans', sans-serif",fontSize:14},
+  header: {borderBottom:"1px solid #1e2d3d",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,background:"#0a0f18",gap:12,width:"100%",boxSizing:"border-box"},
   navBtn: a => ({padding:"8px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:14,fontWeight:600,background:a?"#0f2d1e":"transparent",color:a?"#4db882":"#c0cdd8",transition:"all 0.15s"}),
   page: {padding:"28px 32px",maxWidth:1400,margin:"0 auto"},
   pageTitle: {fontFamily:"'DM Sans', sans-serif",fontSize:28,fontWeight:700,margin:"0 0 6px",color:"#ffffff"},
@@ -1299,13 +1299,21 @@ export default function App() {
       }
       const buf=await file.arrayBuffer();
       const wb=window.XLSX.read(buf,{type:"array"});
+      let totalAnonymized=0;
       const sheets=wb.SheetNames.map(name=>{
         const ws=wb.Sheets[name];
         const json=window.XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
         if(!json.length) return null;
         const headers=json[0].map(h=>String(h).trim()).filter(Boolean);
         if(!headers.length) return null;
-        const dataRows=json.slice(1).filter(r=>r.some(c=>c!==""));
+        let dataRows=json.slice(1).filter(r=>r.some(c=>c!==""));
+        // Name detection — auto-anonymize immediately for every sheet (same as CSV path), no modal/choice
+        const sheetPairType="paired";
+        const flagged=detectRealNames(headers,dataRows);
+        if(flagged.length>0){
+          dataRows=autoAnonymize(headers,dataRows,sheetPairType); // downloads lookup table automatically
+          totalAnonymized+=flagged.length;
+        }
         const preview=dataRows.slice(0,3).map(row=>{
           const obj={};headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
         });
@@ -1313,6 +1321,9 @@ export default function App() {
         return {name,headers,preview,dataRows,fingerprint};
       }).filter(Boolean);
       if(!sheets.length){setUploadResult({success:false,message:"No data found in workbook."});setUploading(false);return;}
+      if(totalAnonymized>0){
+        setUploadResult({success:true,message:`⚠ ${totalAnonymized} name${totalAnonymized!==1?"s":""} detected across the workbook and auto-anonymized. Your lookup table${sheets.length>1?"s have":" has"} been downloaded — keep ${sheets.length>1?"them":"it"} private.`});
+      }
       setXlsxSheets(sheets);
       setXlsxResults([]);
     }catch(err){setUploadResult({success:false,message:"Could not read Excel file: "+err.message});}
