@@ -547,7 +547,8 @@ function autoDetect(headers, pairType="paired") {
       {keys:["donor_dob"],field:"donor_year_born"},
     ]:[]),
     // Generic fields that could be either — map based on pairType
-    {keys:["name","patient name","full name","pt name"],field:isDonorOnly?"donor_name":"recipient_name"},
+    {keys:["name","patient name","full name","pt name","ld patient name","ld name","living donor name"],field:isDonorOnly?"donor_name":"recipient_name"},
+    {keys:["r patient name","recipient patient name","r name","waitlist patient name"],field:"recipient_name"},
     {keys:["abo","blood_type","blood type","abo type","blood group"],field:isDonorOnly?"donor_blood_type":"recipient_blood_type"},
     {keys:["weight"],field:isDonorOnly?"donor_weight_kg":"recipient_weight_kg"},
     {keys:["height"],field:isDonorOnly?"donor_height_cm":"recipient_height_cm"},
@@ -692,7 +693,7 @@ function AuthScreen({onDemoMode}) {
             The match your{" "}
             <span style={{fontStyle:"italic",fontWeight:300,color:"#4db882"}}>EHR couldn't make.</span>
           </div>
-          <div style={{fontSize:15,color:"rgba(255,255,255,0.65)",lineHeight:1.7,marginBottom:40}}>
+          <div style={{fontSize:15,color:"#c4d0d9",lineHeight:1.7,marginBottom:40}}>
             Every willing donor. Every Listed Active recipient. Scored, ranked, and matched — across the exchanges your current workflow was never built to find.
           </div>
 
@@ -701,14 +702,14 @@ function AuthScreen({onDemoMode}) {
             {[["6-WAY","Max chain depth"],["0–100","Pair Score range"],["<1 min","Time to match"]].map(([val,label])=>(
               <div key={label}>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:26,fontWeight:500,color:"#4db882",lineHeight:1}}>{val}</div>
-                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"rgba(255,255,255,0.4)",marginTop:4,letterSpacing:"0.08em"}}>{label}</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",marginTop:4,letterSpacing:"0.08em"}}>{label}</div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Bottom tagline */}
-        <div style={{fontSize:13,color:"rgba(255,255,255,0.3)",lineHeight:1.6,maxWidth:380,fontStyle:"italic"}}>
+        <div style={{fontSize:13,color:"#c4d0d9",lineHeight:1.6,maxWidth:380,fontStyle:"italic"}}>
           Built independently, outside of institutional affiliation, by someone inside the transplant field — because this infrastructure should exist.
         </div>
       </div>
@@ -724,7 +725,7 @@ function AuthScreen({onDemoMode}) {
             <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:28,fontWeight:700,letterSpacing:"-0.5px",marginTop:12,marginBottom:4}}>
               <span style={{color:"#1e3448"}}>Pair</span><span style={{color:"#4db882",fontWeight:300}}>Path</span>
             </div>
-            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:14,fontWeight:300,color:"#4db882"}}>
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:14,fontWeight:400,color:"#1e3448"}}>
               Every exchange starts here.
             </div>
           </div>
@@ -733,7 +734,7 @@ function AuthScreen({onDemoMode}) {
           {mode!=="reset_sent"&&(
             <div style={{display:"flex",gap:4,marginBottom:24,background:"#f2f0eb",borderRadius:8,padding:4}}>
               {[["login","Sign In"],["signup","Create Account"]].map(([m,l])=>(
-                <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");setLocked(false);}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:mode===m?"#ffffff":"transparent",color:mode===m?"#1e3448":"#6a7a8a",boxShadow:mode===m?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all 0.15s"}}>{l}</button>
+                <button key={m} onClick={()=>{setMode(m);setError("");setSuccess("");setLocked(false);}} style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:mode===m?"#ffffff":"transparent",color:mode===m?"#1e3448":"#3d5060",boxShadow:mode===m?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all 0.15s"}}>{l}</button>
               ))}
             </div>
           )}
@@ -815,11 +816,11 @@ function AuthScreen({onDemoMode}) {
                 <>
                   <div style={{display:"flex",alignItems:"center",gap:12,margin:"4px 0"}}>
                     <div style={{flex:1,height:1,background:"#e8ecf0"}}/>
-                    <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#9aabb8",letterSpacing:"0.08em"}}>NO ACCOUNT?</span>
+                    <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6a8899",letterSpacing:"0.08em"}}>NO ACCOUNT?</span>
                     <div style={{flex:1,height:1,background:"#e8ecf0"}}/>
                   </div>
                   <ConfidentialityBox/>
-                  <button onClick={agreed?onDemoMode:null} style={{background:"none",border:"1px solid #1e3448",borderRadius:7,padding:"10px",color:agreed?"#1e3448":"#9aabb8",fontSize:13,fontWeight:600,cursor:agreed?"pointer":"not-allowed",width:"100%",fontFamily:"'DM Sans', sans-serif",opacity:agreed?1:0.5,transition:"all 0.2s"}}>
+                  <button onClick={agreed?onDemoMode:null} style={{background:agreed?"#1e3448":"#e8ecf0",border:"2px solid #1e3448",borderRadius:7,padding:"11px",color:agreed?"#ffffff":"#5a6a7a",fontSize:13,fontWeight:600,cursor:agreed?"pointer":"not-allowed",width:"100%",fontFamily:"'DM Sans', sans-serif",transition:"all 0.2s"}}>
                     Explore Demo Mode
                   </button>
                 </>
@@ -828,7 +829,7 @@ function AuthScreen({onDemoMode}) {
           )}
 
           {/* Footer */}
-          <div style={{marginTop:32,textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec5",letterSpacing:"0.06em",lineHeight:1.8}}>
+          <div style={{marginTop:32,textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6a8899",letterSpacing:"0.06em",lineHeight:1.8}}>
             pairpath.org · Independent clinical tool · Not yet clinically validated
           </div>
         </div>
@@ -866,11 +867,11 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
 
       {preview?.length > 0 && (
         <div style={{marginBottom:20,padding:12,background:"#1a2535",borderRadius:8,border:"1px solid #2a3d52"}}>
-          <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",marginBottom:8}}>FIRST ROW PREVIEW</div>
+          <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",marginBottom:8}}>FIRST ROW PREVIEW</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
             {headers.slice(0,6).map(h=>(
               <div key={h} style={{fontSize:13,color:"#b0bec5"}}>
-                <span style={{color:"#90a4b4"}}>{h}:</span> <span style={{color:"#ffffff"}}>{preview[0][h]||"—"}</span>
+                <span style={{color:"#c4d0d9"}}>{h}:</span> <span style={{color:"#ffffff"}}>{preview[0][h]||"—"}</span>
               </div>
             ))}
           </div>
@@ -881,7 +882,7 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
         {headers.map(h => (
           <div key={h} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1a2535",borderRadius:8,border:"1px solid #2a3d52"}}>
             <div style={{flex:1,fontSize:13,color:"#c8d4dc",fontWeight:500}}>{h}</div>
-            <div style={{fontSize:13,color:"#90a4b4"}}>→</div>
+            <div style={{fontSize:13,color:"#c4d0d9"}}>→</div>
             <select value={mapping[h]||""} onChange={e=>setMapping(m=>({...m,[h]:e.target.value||undefined}))}
               style={{...S.select,width:180,fontSize:13,padding:"5px 8px"}}>
               <option value="">Ignore this column</option>
@@ -1130,6 +1131,39 @@ export default function App() {
     chainsLong:chains.filter(c=>c.length>=4).length,
   };
 
+  // ── Biometric identity matching ────────────────────────────────────────────
+  // A patient is the same person if their clinical fingerprint matches:
+  // blood type + birth year + weight (±2kg) + height (±2cm) + PRA (recipients)
+  // Name/ID is NOT the identifier — two entries named D1 and D3 with same stats = same patient
+  function biometricMatch(a, b, role="donor"){
+    const prefix = role==="donor" ? "donor_" : "recipient_";
+    // Blood type must match exactly
+    const btA=a[`${prefix}blood_type`], btB=b[`${prefix}blood_type`];
+    if(btA&&btB&&btA!==btB) return false;
+    // Birth year must match if both present
+    const yrA=String(a[`${prefix}year_born`]||"").trim();
+    const yrB=String(b[`${prefix}year_born`]||"").trim();
+    if(yrA&&yrB&&yrA!==yrB) return false;
+    // Weight within 2kg tolerance
+    const wtA=parseFloat(a[`${prefix}weight_kg`]||0);
+    const wtB=parseFloat(b[`${prefix}weight_kg`]||0);
+    if(wtA>0&&wtB>0&&Math.abs(wtA-wtB)>2) return false;
+    // Height within 2cm tolerance
+    const htA=parseFloat(a[`${prefix}height_cm`]||0);
+    const htB=parseFloat(b[`${prefix}height_cm`]||0);
+    if(htA>0&&htB>0&&Math.abs(htA-htB)>2) return false;
+    // PRA within 2% for recipients
+    if(role==="recipient"){
+      const praA=parseFloat(a.recipient_pra_percent||"-1");
+      const praB=parseFloat(b.recipient_pra_percent||"-1");
+      if(praA>=0&&praB>=0&&Math.abs(praA-praB)>2) return false;
+    }
+    // Must have at least blood type OR year to make a match — avoid false positives on empty data
+    const hasEnoughDataA=(btA||yrA||wtA||htA);
+    const hasEnoughDataB=(btB||yrB||wtB||htB);
+    return !!(hasEnoughDataA&&hasEnoughDataB);
+  }
+
   function isDuplicate(f, excludeId=null){
     return pairs.some(p=>{
       if(excludeId&&p.id===excludeId) return false;
@@ -1137,13 +1171,24 @@ export default function App() {
       const rName=(p.recipient_name||"").trim().toLowerCase();
       const fDName=(f.donor_name||"").trim().toLowerCase();
       const fRName=(f.recipient_name||"").trim().toLowerCase();
-      // If birth years are both present and different — definitely not the same person
-      const donorYearMismatch=p.donor_year_born&&f.donor_year_born&&String(p.donor_year_born)!==String(f.donor_year_born);
-      const recipYearMismatch=p.recipient_year_born&&f.recipient_year_born&&String(p.recipient_year_born)!==String(f.recipient_year_born);
-      if(f.pair_type==="altruistic") return dName&&dName===fDName&&!donorYearMismatch;
-      if(f.pair_type==="recipient_only") return rName&&rName===fRName&&!recipYearMismatch;
-      // Paired: both names must match AND neither birth year can conflict
-      return dName&&rName&&dName===fDName&&rName===fRName&&!donorYearMismatch&&!recipYearMismatch;
+
+      if(f.pair_type==="altruistic"){
+        // Same name → duplicate (name check)
+        const sameName=dName&&dName===fDName;
+        // OR same biometric fingerprint → duplicate even if different ID
+        const sameBiometric=biometricMatch(p,f,"donor");
+        return sameName||sameBiometric;
+      }
+      if(f.pair_type==="recipient_only"){
+        const sameName=rName&&rName===fRName;
+        const sameBiometric=biometricMatch(p,f,"recipient");
+        return sameName||sameBiometric;
+      }
+      // Paired: check donor AND recipient independently
+      const donorSame=(dName&&dName===fDName)||biometricMatch(p,f,"donor");
+      const recipSame=(rName&&rName===fRName)||biometricMatch(p,f,"recipient");
+      // Both must be the same for the pair to be a duplicate
+      return donorSame&&recipSame;
     });
   }
 
@@ -1267,25 +1312,42 @@ export default function App() {
   }
 
   // ── Name Detection ─────────────────────────────────────────────────────────
-  function looksLikeRealName(val){
+  const CLINICAL_VALUES=new Set(["positive","negative","unknown","active","inactive","matched","withdrawn","high","medium","low","pending","altruistic","paired","male","female","other","yes","no","true","false"]);
+
+  function looksLikeRealName(val, columnHeader=""){
     if(!val) return false;
     const s=String(val).trim();
     if(s.length<3) return false;
-    if(/\d/.test(s)) return false; // has numbers — likely an ID
-    if(/^[A-Z]{1,3}\d+$/i.test(s)) return false; // D1, R23, PT001 pattern
-    if(/[-_]/g.test(s)&&/\d/.test(s)) return false; // ID-001 style
-    // Looks like a name if: contains a space, or is title case word >4 chars
+    if(/\d/.test(s)) return false;
+    if(CLINICAL_VALUES.has(s.toLowerCase())) return false;
+    if(/^[A-Z]{1,2}$/.test(s)) return false; // blood types A, B, AB, O
+    if(/^[A-Z]{1,3}\d*$/i.test(s)) return false; // D1, R23, AB style
+    if(/[-_]/.test(s)&&s.length<8) return false;
+    // Check column header suggests name field
+    const hLower=columnHeader.toLowerCase();
+    const isNameColumn=
+      hLower.includes("name")||
+      hLower.includes("patient")||
+      hLower.includes("donor")||
+      hLower.includes("recipient")||
+      hLower.includes("subject")||
+      hLower.includes("ld ")||
+      hLower.startsWith("ld")||
+      hLower.startsWith("r ") ||
+      hLower==="r";
+    if(!isNameColumn) return false;
     const hasSpace=/\s/.test(s);
-    const isTitleCase=/^[A-Z][a-z]{3,}/.test(s);
-    return hasSpace||isTitleCase;
+    const isTitleCase=/^[A-Z][a-z]{2,}/.test(s);
+    const isAllCapsName=/^[A-Z]{2,}(,\s*[A-Z]+|\s+[A-Z]{2,})/.test(s);
+    return hasSpace||isTitleCase||isAllCapsName;
   }
 
-  function detectRealNames(headers, rows, nameFields=["donor_name","recipient_name"]){
+  function detectRealNames(headers, rows){
     const flagged=new Set();
     rows.forEach(row=>{
       headers.forEach((h,i)=>{
         const val=Array.isArray(row)?row[i]:row[h];
-        if(looksLikeRealName(val)) flagged.add(String(val).trim());
+        if(looksLikeRealName(val, h)) flagged.add(String(val).trim());
       });
     });
     return [...flagged];
@@ -1301,11 +1363,11 @@ export default function App() {
       const setName=(field,val)=>{if(Array.isArray(newRow)){const i=headers.indexOf(field);if(i>=0)newRow[i]=val;}else newRow[field]=val;};
       const dName=getName("donor_name")||getName(headers.find(h=>h.toLowerCase().includes("donor")&&h.toLowerCase().includes("name"))||"");
       const rName=getName("recipient_name")||getName(headers.find(h=>h.toLowerCase().includes("recipient")&&h.toLowerCase().includes("name"))||"");
-      if(dName&&looksLikeRealName(dName)){
+      if(dName&&looksLikeRealName(dName, "donor_name")){
         if(!donorNames.has(dName)) donorNames.set(dName,`D${dCount++}`);
         setName("donor_name",donorNames.get(dName));
       }
-      if(rName&&looksLikeRealName(rName)){
+      if(rName&&looksLikeRealName(rName, "recipient_name")){
         if(!recipNames.has(rName)) recipNames.set(rName,`R${rCount++}`);
         setName("recipient_name",recipNames.get(rName));
       }
@@ -1326,20 +1388,48 @@ export default function App() {
     const text=await file.text();
     const[headerLine,...rows]=text.trim().split("\n");
     const headers=headerLine.split(",").map(h=>h.trim());
-    const dataRows=rows.filter(r=>r.trim()).map(row=>row.split(",").map(v=>v.trim().replace(/^"|"$/g,"")));
+
+    // Pre-convert Excel serial dates in preview and data rows
+    // Expanded range to catch all Excel date serials (1940-2100)
+    function preConvertSerials(val){
+      if(!val) return val;
+      const s=String(val).trim();
+      const n=parseFloat(s);
+      if(!isNaN(n)&&n>14000&&n<80000&&Number.isInteger(n)&&!s.includes("/")){
+        const date=new Date((n-25569)*86400000);
+        return date.toISOString().split("T")[0];
+      }
+      return val;
+    }
+
+    const dataRows=rows.filter(r=>r.trim()).map(row=>
+      row.split(",").map(v=>preConvertSerials(v.trim().replace(/^"|"$/g,"")))
+    );
     const preview=dataRows.slice(0,3).map(row=>{
       const obj={};headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;
     });
 
-    // Name detection — check before showing mapper
+    // Rebuild text with converted values for downstream processing
+    const convertedText=[headerLine,...dataRows.map(r=>r.join(","))].join("\n");
+
+    // Name detection — auto-anonymize immediately, no option to proceed with real names
     const flagged=detectRealNames(headers,dataRows);
     if(flagged.length>0){
-      setNameWarning({flagged,headers,dataRows,preview,text,pairType});
+      // Silently auto-anonymize and download lookup table
+      const anonymized=autoAnonymize(headers,dataRows,pairType);
+      const newText=[headerLine,...anonymized.map(r=>r.join(","))].join("\n");
+      const preview=anonymized.slice(0,3).map(row=>{
+        const obj={};headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;
+      });
+      // Show a non-blocking toast instead of a blocking modal
+      setUploadResult({success:true,message:`⚠ ${flagged.length} name${flagged.length!==1?"s":""} detected and auto-anonymized. Your lookup table has been downloaded — keep it private.`});
+      setCsvMapper({headers,pairType,preview,text:newText});
+      setUploadPairType(pairType);
       setUploading(false);
       return;
     }
 
-    setCsvMapper({headers,pairType,preview,text});
+    setCsvMapper({headers,pairType,preview,text:convertedText});
     setUploadPairType(pairType);
     setUploading(false);
   }
@@ -1375,28 +1465,60 @@ export default function App() {
     // Validate CMV
     if(!["Positive","Negative","Unknown"].includes(obj.donor_cmv)) obj.donor_cmv="Unknown";
     if(!["Positive","Negative","Unknown"].includes(obj.recipient_cmv)) obj.recipient_cmv="Unknown";
-    // Convert Excel serial date numbers — applies to ALL date fields
-    function excelSerialToISO(val){
+    // ── Bulletproof year extractor ─────────────────────────────────────────
+    // Handles: Excel serial (45950), ISO (1975-03-14), slash (03/14/1975),
+    // plain year (1975), text with year, any format Epic might export
+    function extractYearFromAnything(val){
       if(!val&&val!==0) return val;
-      const n=parseFloat(String(val).trim());
-      if(!isNaN(n)&&n>40000&&n<60000){
+      const s=String(val).trim();
+      if(!s) return val;
+      const n=parseFloat(s);
+      // Excel serial date (days since 1900) — between 1900 and 2100 as serials
+      if(!isNaN(n)&&n>20000&&n<80000){
         const date=new Date((n-25569)*86400000);
-        return date.toISOString().split("T")[0]; // YYYY-MM-DD
+        return String(date.getUTCFullYear());
+      }
+      // Already a 4-digit year
+      if(/^\d{4}$/.test(s)&&parseInt(s)>1900&&parseInt(s)<2100) return s;
+      // ISO: 1975-03-14 or 2025-10-25
+      if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,4);
+      // MM/DD/YYYY or DD/MM/YYYY — take the 4-digit part
+      const slashParts=s.split("/");
+      const fourDigitPart=slashParts.find(p=>p.length===4&&parseInt(p)>1900);
+      if(fourDigitPart) return fourDigitPart;
+      // DD-Mon-YYYY like 14-Mar-1975
+      const dashParts=s.split("-");
+      const yearPart=dashParts.find(p=>p.length===4&&parseInt(p)>1900);
+      if(yearPart) return yearPart;
+      // Last resort — extract any 4-digit number that looks like a year
+      const match=s.match(/\b(19|20)\d{2}\b/);
+      if(match) return match[0];
+      return val; // give up, return as-is
+    }
+
+    function extractISODate(val){
+      if(!val&&val!==0) return val;
+      const s=String(val).trim();
+      if(!s) return val;
+      const n=parseFloat(s);
+      // Excel serial → ISO date
+      if(!isNaN(n)&&n>20000&&n<80000){
+        const date=new Date((n-25569)*86400000);
+        return date.toISOString().split("T")[0];
+      }
+      // Already ISO
+      if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+      // MM/DD/YYYY
+      const slashParts=s.split("/");
+      if(slashParts.length===3){
+        const [m,d,y]=slashParts;
+        if(y?.length===4) return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
       }
       return val;
     }
-    function extractYear(val){
-      if(!val) return val;
-      const converted=excelSerialToISO(val); // handle serial first
-      const s=String(converted).trim();
-      if(s.includes("-")) return s.split("-")[0]; // YYYY-MM-DD → YYYY
-      if(s.includes("/")){ const p=s.split("/"); return p[2]?.length===4?p[2]:`20${p[2]}`; } // MM/DD/YYYY → YYYY
-      if(/^\d{4}$/.test(s)) return s; // already a year
-      return s;
-    }
-    obj.recipient_dialysis_start=excelSerialToISO(obj.recipient_dialysis_start);
-    obj.recipient_year_born=extractYear(obj.recipient_year_born);
-    obj.donor_year_born=extractYear(obj.donor_year_born);
+    obj.recipient_dialysis_start=extractISODate(obj.recipient_dialysis_start);
+    obj.recipient_year_born=extractYearFromAnything(obj.recipient_year_born);
+    obj.donor_year_born=extractYearFromAnything(obj.donor_year_born);
     return obj;
   }
 
@@ -1449,8 +1571,7 @@ export default function App() {
           return updated;
         });
         addAudit("BULK IMPORT",`Sheet "${sheetContext.name}": imported ${data?.length??0} entries`);
-        // Advance queue — remove first sheet
-        setXlsxSheets(prev=>{
+        // Advance queue — remove first sheet        setXlsxSheets(prev=>{
           const remaining=prev.slice(1);
           if(!remaining.length) setXlsxSummaryVisible(true);
           return remaining;
@@ -1522,7 +1643,7 @@ export default function App() {
             </div>
             {/* Height and weight unit toggles */}
             <div style={{marginBottom:16,padding:"12px 14px",background:"#1a2535",borderRadius:8,border:"1px solid #2a3d52"}}>
-              <div style={{fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace",marginBottom:8}}>HEIGHT UNIT IN YOUR FILE</div>
+              <div style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginBottom:8}}>HEIGHT UNIT IN YOUR FILE</div>
               <div style={{display:"flex",gap:8,marginBottom:12}}>
                 {[["meters","Meters (Epic default)"],["cm","Centimeters"],["auto","Auto-detect"]].map(([val,label])=>(
                   <button key={val} onClick={()=>setImportHeightUnit(val)}
@@ -1534,7 +1655,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div style={{fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace",marginBottom:8}}>WEIGHT UNIT IN YOUR FILE</div>
+              <div style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginBottom:8}}>WEIGHT UNIT IN YOUR FILE</div>
               <div style={{display:"flex",gap:8}}>
                 {[["kg","Kilograms (Epic default)"],["lbs","Pounds"]].map(([val,label])=>(
                   <button key={val} onClick={()=>setImportWeightUnit(val)}
@@ -1546,7 +1667,7 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div style={{fontSize:13,color:"#6a8090",marginTop:6}}>
+              <div style={{fontSize:13,color:"#b0bec8",marginTop:6}}>
                 {importWeightUnit==="lbs"&&"Pounds will be converted to kg automatically"}
                 {importWeightUnit==="kg"&&"Epic exports weight in kg — no conversion needed"}
               </div>
@@ -1607,7 +1728,7 @@ export default function App() {
               </div>
 
               <div style={{marginBottom:12,padding:"10px 12px",background:"#1a2535",borderRadius:8,border:"1px solid #2a3d52"}}>
-                <div style={{fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace",marginBottom:6}}>HEIGHT UNIT</div>
+                <div style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginBottom:6}}>HEIGHT UNIT</div>
                 <div style={{display:"flex",gap:6,marginBottom:8}}>
                   {[["meters","Meters (Epic)"],["cm","Centimeters"],["auto","Auto"]].map(([val,label])=>(
                     <button key={val} onClick={()=>setImportHeightUnit(val)}
@@ -1619,7 +1740,7 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                <div style={{fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace",marginBottom:6}}>WEIGHT UNIT</div>
+                <div style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginBottom:6}}>WEIGHT UNIT</div>
                 <div style={{display:"flex",gap:6}}>
                   {[["kg","kg (Epic)"],["lbs","lbs"]].map(([val,label])=>(
                     <button key={val} onClick={()=>setImportWeightUnit(val)}
@@ -1662,7 +1783,7 @@ export default function App() {
                 <span style={{color:"#c8d4dc",fontWeight:500}}>{r.sheetName}</span>
                 <div style={{display:"flex",gap:10,alignItems:"center"}}>
                   {r.error&&r.error!=="Skipped"&&<span style={{color:"#ff8a8a",fontSize:13}}>{r.error}</span>}
-                  {r.error==="Skipped"&&<span style={{color:"#90a4b4",fontSize:13}}>Skipped</span>}
+                  {r.error==="Skipped"&&<span style={{color:"#c4d0d9",fontSize:13}}>Skipped</span>}
                   {!r.error&&<span style={{color:"#4db882",fontSize:13}}>{r.imported} imported</span>}
                   {r.dupes>0&&<span style={{color:"#ffd166",fontSize:13}}>{r.dupes} dupes skipped</span>}
                 </div>
@@ -1690,7 +1811,7 @@ export default function App() {
                 style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
                 <div style={{fontSize:14,fontWeight:600,color:"#ffffff",marginBottom:3}}>{label}</div>
                 <div style={{fontSize:13,color:"#6ab4d0",marginBottom:3}}>{desc}</div>
-                <div style={{fontSize:13,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>{cols}</div>
+                <div style={{fontSize:13,color:"#b0bec8",fontFamily:"'DM Mono', monospace"}}>{cols}</div>
               </button>
             ))}
             <button onClick={()=>setShowMatchExport(false)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",width:"100%",marginTop:4}}>Cancel</button>
@@ -1698,56 +1819,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Name Detection Warning Modal */}
-      {nameWarning&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-          <div style={{...S.card,maxWidth:520,width:"100%"}}>
-            <div style={{fontSize:22,marginBottom:8}}>⚠️ Possible Real Names Detected</div>
-            <p style={{fontSize:13,color:"#b0bec5",marginBottom:12,lineHeight:1.6}}>
-              PairPath found values that look like real patient names. To protect patient privacy, all data must be de-identified before upload.
-            </p>
-            <div style={{background:"#1a1010",border:"1px solid #3a1010",borderRadius:8,padding:"10px 14px",marginBottom:16,maxHeight:140,overflowY:"auto"}}>
-              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#ff8a8a",letterSpacing:"0.08em",marginBottom:6}}>FLAGGED VALUES ({nameWarning.flagged.length})</div>
-              {nameWarning.flagged.map((n,i)=>(
-                <div key={i} style={{fontSize:13,color:"#ffb0b0",marginBottom:3}}>• {n}</div>
-              ))}
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <button onClick={()=>{
-                const anonymized=autoAnonymize(nameWarning.headers,nameWarning.dataRows,nameWarning.pairType);
-                // Rebuild text with anonymized data
-                const newText=[nameWarning.headers.join(","),...anonymized.map(r=>r.join(","))].join("\n");
-                const preview=anonymized.slice(0,3).map(row=>{const obj={};nameWarning.headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;});
-                setCsvMapper({headers:nameWarning.headers,pairType:nameWarning.pairType,preview,text:newText});
-                setUploadPairType(nameWarning.pairType);
-                setNameWarning(null);
-              }} style={{...S.btn,background:"#1a6b45",color:"#ffffff",textAlign:"left",padding:"14px 16px"}}>
-                <div style={{fontWeight:700,marginBottom:2}}>Auto-Anonymize + Download Lookup Table</div>
-                <div style={{fontSize:13,fontWeight:400,opacity:0.8}}>Replaces names with D1/R1 IDs. Downloads a lookup CSV so you can re-identify after export.</div>
-              </button>
-              <button onClick={()=>{
-                const preview=nameWarning.dataRows.slice(0,3).map(row=>{const obj={};nameWarning.headers.forEach((h,i)=>{obj[h]=row[i]||"";});return obj;});
-                setCsvMapper({headers:nameWarning.headers,pairType:nameWarning.pairType,preview,text:nameWarning.text});
-                setUploadPairType(nameWarning.pairType);
-                setNameWarning(null);
-              }} style={{...S.btn,background:"#2a1500",border:"1px solid #6b3a00",color:"#ffd166",textAlign:"left",padding:"14px 16px"}}>
-                <div style={{fontWeight:700,marginBottom:2}}>Proceed Anyway</div>
-                <div style={{fontSize:13,fontWeight:400,opacity:0.8}}>I confirm this data is already de-identified and these are not real patient names.</div>
-              </button>
-              <button onClick={()=>setNameWarning(null)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Cancel Upload</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Duplicate Warning Modal */}
       {duplicateWarning&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-          <div style={{...S.card,maxWidth:440,width:"90%",textAlign:"center"}}>
+          <div style={{...S.card,maxWidth:480,width:"90%",textAlign:"center"}}>
             <div style={{fontSize:22,marginBottom:8}}>⚠️</div>
             <div style={{fontSize:16,color:"#ffd166",marginBottom:8}}>Possible Duplicate Detected</div>
             <div style={{fontSize:13,color:"#b0bec5",marginBottom:6}}>
-              A record with this donor/recipient name pair already exists in the registry.
+              An entry in the registry matches this patient's clinical profile — blood type, birth year, weight, and height are the same or very close. The ID doesn't have to match.
             </div>
             <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#ffffff",padding:"8px 12px",background:"#1a2535",borderRadius:6,marginBottom:20}}>
               {duplicateWarning.donor_name||"—"} / {duplicateWarning.recipient_name||"—"}
@@ -1766,20 +1845,20 @@ export default function App() {
       {showAudit&&isAdmin&&(
         <div style={{position:"fixed",top:60,right:0,bottom:0,width:380,background:"#131c26",borderLeft:"1px solid #1e2d3d",zIndex:500,overflowY:"auto",padding:20}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em"}}>AUDIT LOG</div>
+            <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em"}}>AUDIT LOG</div>
             <button onClick={()=>setShowAudit(false)} style={{background:"none",border:"none",color:"#b0bec5",cursor:"pointer",fontSize:18}}>×</button>
           </div>
           {auditLog.length===0?(
-            <div style={{fontSize:13,color:"#6a8090"}}>No actions logged this session.</div>
+            <div style={{fontSize:13,color:"#b0bec8"}}>No actions logged this session.</div>
           ):(
             auditLog.map(entry=>(
               <div key={entry.id} style={{borderTop:"1px solid #141c24",paddingTop:10,marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
                   <span style={{...S.tag(entry.action==="DELETE"||entry.action==="BULK DELETE"?"#ff8a8a":entry.action==="ADD"||entry.action==="BULK IMPORT"?"#2dd4a0":"#ffd166")}}>{entry.action}</span>
-                  <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6a8090"}}>{entry.time}</span>
+                  <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8"}}>{entry.time}</span>
                 </div>
                 <div style={{fontSize:13,color:"#b0bec5",marginBottom:2}}>{entry.detail}</div>
-                <div style={{fontSize:13,color:"#6a8090"}}>{entry.user}</div>
+                <div style={{fontSize:13,color:"#b0bec8"}}>{entry.user}</div>
               </div>
             ))
           )}
@@ -1788,7 +1867,7 @@ export default function App() {
       {matchDetail&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>setMatchDetail(null)}>
           <div style={{...S.card,maxWidth:480,width:"90%"}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>BEST MATCH</div>
+            <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>BEST MATCH</div>
             <div style={{fontSize:14,color:"#ffffff",marginBottom:4}}>Recipient: <strong>{matchDetail.recipient.recipient_name}</strong></div>
             <div style={{fontSize:14,color:"#ffffff",marginBottom:20}}>Best Donor: <strong>{matchDetail.donor.donor_name||"Altruistic Donor"}</strong></div>
             {[
@@ -1876,7 +1955,7 @@ export default function App() {
             </div>
           </div>
           {activePairs.filter(p=>p.donor_blood_type).length===0?(
-            <div style={{textAlign:"center",padding:80,color:"#5a6a7a"}}>
+            <div style={{textAlign:"center",padding:80,color:"#b0bec8"}}>
               <div style={{fontSize:13,marginBottom:16}}>No active pairs with donors yet</div>
               <button onClick={()=>setView("add")} style={{...S.btn,background:"#1a6b45",color:"#ffffff"}}>Register First Pair</button>
             </div>
@@ -1885,7 +1964,7 @@ export default function App() {
               <table style={{borderCollapse:"collapse",width:"100%"}}>
                 <thead>
                   <tr style={{background:"#131c26"}}>
-                    <th style={{padding:"12px 16px",textAlign:"left",fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace",letterSpacing:"0.08em",fontWeight:400,borderBottom:"1px solid #1e2d3d",borderRight:"1px solid #1e2d3d",minWidth:190}}>
+                    <th style={{padding:"12px 16px",textAlign:"left",fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",letterSpacing:"0.08em",fontWeight:400,borderBottom:"1px solid #1e2d3d",borderRight:"1px solid #1e2d3d",minWidth:190}}>
                       RECIPIENT ↓ / DONOR →
                     </th>
                     {activePairs.filter(p=>p.donor_blood_type).map(p=>(
@@ -1929,7 +2008,7 @@ export default function App() {
                             title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+result.reasons.hlaMismatches} | ${s.label}`}
                             style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
                             <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
-                            <div style={{fontSize:13,color:`${s.text}99`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches}MM`}</div>
+                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches}MM`}</div>
                           </td>
                         );
                       })}
@@ -1939,7 +2018,7 @@ export default function App() {
               </table>
             </div>
           )}
-          <p style={{marginTop:10,fontSize:13,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>
+          <p style={{marginTop:10,fontSize:13,color:"#b0bec8",fontFamily:"'DM Mono', monospace"}}>
             MM = HLA mismatches · ABO = blood type only · ALT = altruistic donor · All matches require crossmatch confirmation
           </p>
         </div>
@@ -1963,12 +2042,12 @@ export default function App() {
                 <button onClick={()=>{setView("add");setForm(emptyForm);}} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",padding:"14px 20px",fontSize:15}}>
                   + Add a Single Entry Manually
                 </button>
-                <button onClick={()=>setDemoMode(true)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#6a8090",padding:"14px 20px",fontSize:14}}>
+                <button onClick={()=>setDemoMode(true)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec8",padding:"14px 20px",fontSize:14}}>
                   Explore with Demo Data First
                 </button>
               </div>
               <div style={{padding:"16px 20px",borderRadius:10,background:"#131c26",border:"1px solid #1e2d3d",textAlign:"left"}}>
-                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6a8090",letterSpacing:"0.08em",marginBottom:10}}>QUICK START</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:10}}>QUICK START</div>
                 {[
                   ["1","Export Active Status 1 recipients from Epic as CSV"],
                   ["2","Export Active Living Donors in Evaluation from Epic as CSV"],
@@ -2038,10 +2117,10 @@ export default function App() {
 
           {/* Multi-key sort stack */}
           <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",marginBottom:8}}>
-            <span style={{fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace",marginRight:4}}>SORT BY</span>
+            <span style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",marginRight:4}}>SORT BY</span>
             {sortStack.map((s,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",background:"#131c26",border:"1px solid #1e2d3d",borderRadius:6}}>
-                {i>0&&<span style={{fontSize:13,color:"#6a8090",marginRight:4}}>then</span>}
+                {i>0&&<span style={{fontSize:13,color:"#b0bec8",marginRight:4}}>then</span>}
                 <select value={s.key} onChange={e=>{const ns=[...sortStack];ns[i]={...ns[i],key:e.target.value};setSortStack(ns);}}
                   style={{...S.select,width:170,fontSize:13,padding:"3px 6px",border:"none",background:"transparent"}}>
                   <option value="date">Date Added</option>
@@ -2063,7 +2142,7 @@ export default function App() {
             ))}
             {sortStack.length<4&&(
               <button onClick={()=>setSortStack(st=>[...st,{key:"pra",dir:"desc"}])}
-                style={{...S.btn,background:"transparent",border:"1px dashed #2a3d52",color:"#90a4b4",padding:"4px 10px",fontSize:13}}>
+                style={{...S.btn,background:"transparent",border:"1px dashed #2a3d52",color:"#c4d0d9",padding:"4px 10px",fontSize:13}}>
                 + Add level
               </button>
             )}
@@ -2089,7 +2168,7 @@ export default function App() {
           </div>
 
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {filteredPairs.length===0&&<div style={{textAlign:"center",padding:40,color:"#5a6a7a",fontSize:13}}>No entries match your filters</div>}
+            {filteredPairs.length===0&&<div style={{textAlign:"center",padding:40,color:"#b0bec8",fontSize:13}}>No entries match your filters</div>}
             {filteredPairs.map(pair=>{
               const pairDomain=pair.user_email?pair.user_email.split("@")[1]?.toLowerCase():"";
               const canEdit=isAdmin||(hasCentreDomain&&pairDomain===userDomain)||pair.user_id===currentUserId;
@@ -2135,7 +2214,7 @@ export default function App() {
                       </>
                     )}
                     {pair.donor_name&&(
-                      <div style={{fontSize:13,color:"#90a4b4",marginTop:pair.recipient_name?4:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <div style={{fontSize:13,color:"#c4d0d9",marginTop:pair.recipient_name?4:0,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                         {pair.donor_priority&&pair.pair_type==="paired"&&(
                           <span style={{...S.tag(priorityColor[pair.donor_priority]||"#90a4b4"),fontSize:13}}>{pair.donor_priority}</span>
                         )}
@@ -2148,7 +2227,7 @@ export default function App() {
                     {/* Sibling donors for same recipient */}
                     {siblingDonors.length>0&&(
                       <div style={{marginTop:6,paddingTop:6,borderTop:"1px solid #141c24"}}>
-                        <div style={{fontSize:13,color:"#6a8090",fontFamily:"'DM Mono', monospace",marginBottom:4}}>ALSO WILLING TO DONATE</div>
+                        <div style={{fontSize:13,color:"#b0bec8",fontFamily:"'DM Mono', monospace",marginBottom:4}}>ALSO WILLING TO DONATE</div>
                         {siblingDonors.map(sd=>{
                           const sdResult=sd.donor_blood_type&&pair.recipient_blood_type?calculateCompatibility(sd,pair):null;
                           const sdStyle=sdResult?scoreStyle(sdResult.score,sdResult.aboOnly):null;
@@ -2156,7 +2235,7 @@ export default function App() {
                             <div key={sd.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,fontSize:13}}>
                               <span style={{...S.tag(priorityColor[sd.donor_priority]||"#90a4b4"),fontSize:13}}>{sd.donor_priority||"—"}</span>
                               <span style={{color:"#c8d4dc"}}>{sd.donor_name}</span>
-                              <span style={{color:"#90a4b4"}}>{sd.donor_blood_type||""}</span>
+                              <span style={{color:"#c4d0d9"}}>{sd.donor_blood_type||""}</span>
                               {sdStyle&&<span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:sdStyle.text,background:sdStyle.bg,padding:"1px 6px",borderRadius:4}}>{sdResult.score??"ABO ✓"}</span>}
                             </div>
                           );
@@ -2174,14 +2253,14 @@ export default function App() {
                         <div style={{fontFamily:"'DM Mono', monospace",fontSize:18,color:bs.text,lineHeight:1}}>
                           {best.result.score!==null?best.result.score:"ABO ✓"}
                         </div>
-                        <div style={{fontSize:13,color:`${bs.text}88`,marginTop:2}}>{best.result.score!==null?"PAIR SCORE":"HLA NEEDED"}</div>
+                        <div style={{fontSize:13,color:`${bs.text}cc`,marginTop:2}}>{best.result.score!==null?"PAIR SCORE":"HLA NEEDED"}</div>
                       </button>
                     )}
                     <select value={pair.status} onChange={e=>handleStatusChange(pair.id,e.target.value)} disabled={!canEdit}
                       style={{...S.select,width:170,fontSize:13,opacity:canEdit?1:0.4,cursor:canEdit?"pointer":"not-allowed"}}>
                       {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
                     </select>
-                    {!canEdit&&appMode==="national"&&<span style={{fontSize:13,color:"#6a8090",fontFamily:"'DM Mono', monospace"}}>READ ONLY</span>}
+                    {!canEdit&&appMode==="national"&&<span style={{fontSize:13,color:"#b0bec8",fontFamily:"'DM Mono', monospace"}}>READ ONLY</span>}
                     {canEdit&&(
                       <>
                         <button onClick={()=>startEdit(pair)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",padding:"6px 12px"}}>Edit</button>
@@ -2189,7 +2268,7 @@ export default function App() {
                       </>
                     )}
                   </div>
-                  {pair.notes&&<div style={{width:"100%",fontSize:13,color:"#5a6a7a",borderTop:"1px solid #141c24",paddingTop:8,marginTop:4}}>📝 {pair.notes}</div>}
+                  {pair.notes&&<div style={{width:"100%",fontSize:13,color:"#b0bec8",borderTop:"1px solid #141c24",paddingTop:8,marginTop:4}}>📝 {pair.notes}</div>}
                 </div>
               );
             })}
@@ -2206,7 +2285,7 @@ export default function App() {
           {chainsLoading?(
             <div style={{textAlign:"center",padding:60,color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
           ):chains.length===0?(
-            <div style={{textAlign:"center",padding:60,color:"#5a6a7a",fontSize:13}}>
+            <div style={{textAlign:"center",padding:60,color:"#b0bec8",fontSize:13}}>
               No compatible chains found yet — add incompatible pairs to identify exchange opportunities
             </div>
           ):(
@@ -2232,7 +2311,7 @@ export default function App() {
                               <span style={{fontSize:13,color:"#4db882",marginLeft:4}}>({link.donorBlood})</span>
                               {link.altruistic&&<span style={{fontSize:13,color:"#ffd166",marginLeft:4}}>ALT</span>}
                             </div>
-                            <div style={{fontSize:13,color:"#5a6a7a",margin:"4px 0",textAlign:"center"}}>donates to</div>
+                            <div style={{fontSize:13,color:"#b0bec8",margin:"4px 0",textAlign:"center"}}>donates to</div>
                             <div style={{fontSize:13,fontWeight:600,color:"#6ad0a0"}}>
                               {link.recipientName?.split(" ")[0]||"—"}
                               <span style={{fontSize:13,color:"#4db882",marginLeft:4}}>({link.recipientBlood})</span>
@@ -2245,7 +2324,7 @@ export default function App() {
                         </div>
                       );
                     })}
-                    <div style={{padding:"0 8px",color:"#3d5060",fontSize:20}}>↩</div>
+                    <div style={{padding:"0 8px",color:"#6a8899",fontSize:20}}>↩</div>
                   </div>
                 </div>
               ))}
@@ -2268,20 +2347,20 @@ export default function App() {
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
               {label:"Completed",value:stats.completed,color:"#6ab4d0"},
-              {label:"Withdrawn",value:stats.withdrawn,color:"#5a6a7a"},
+              {label:"Withdrawn",value:stats.withdrawn,color:"#b0bec8"},
               {label:"2-Way Chains",value:stats.chains2,color:"#4db882"},
               {label:"3-Way Chains",value:stats.chains3,color:"#6ab4d0"},
               {label:"4+ Way Chains",value:stats.chainsLong,color:"#ffd166"},
             ].map(({label,value,color})=>(
               <div key={label} style={{...S.card,textAlign:"center"}}>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:30,fontWeight:500,color,lineHeight:1}}>{value}</div>
-                <div style={{fontSize:13,color:"#90a4b4",marginTop:6}}>{label}</div>
+                <div style={{fontSize:13,color:"#c4d0d9",marginTop:6}}>{label}</div>
               </div>
             ))}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             <div style={S.card}>
-              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>RECIPIENT BLOOD TYPE — ACTIVE</div>
+              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>RECIPIENT BLOOD TYPE — ACTIVE</div>
               {["A","B","AB","O"].map(bt=>{
                 const count=activePairs.filter(p=>p.recipient_blood_type===bt).length;
                 const pct=activePairs.length?Math.round((count/activePairs.length)*100):0;
@@ -2289,7 +2368,7 @@ export default function App() {
                   <div key={bt} style={{marginBottom:10}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:13}}>
                       <span style={{color:"#b0bec5"}}>Type {bt}</span>
-                      <span style={{fontFamily:"'DM Mono', monospace",color:"#ffffff"}}>{count} <span style={{color:"#5a6a7a"}}>({pct}%)</span></span>
+                      <span style={{fontFamily:"'DM Mono', monospace",color:"#ffffff"}}>{count} <span style={{color:"#b0bec8"}}>({pct}%)</span></span>
                     </div>
                     <div style={{height:5,background:"#1e2d3d",borderRadius:2}}>
                       <div style={{height:"100%",width:`${pct}%`,background:"#2dd4a0",borderRadius:2}}/>
@@ -2299,7 +2378,7 @@ export default function App() {
               })}
             </div>
             <div style={S.card}>
-              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>HIGH URGENCY — NO MATCH YET</div>
+              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>HIGH URGENCY — NO MATCH YET</div>
               {activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length===0?(
                 <div style={{fontSize:13,color:"#4db882"}}>All high urgency recipients have at least one compatible match ✓</div>
               ):(
@@ -2314,7 +2393,7 @@ export default function App() {
             </div>
             {appMode==="national"&&centres.length>0&&(
               <div style={S.card}>
-                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTER</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTER</div>
                 {centres.map(c=>{
                   const count=visiblePairs.filter(p=>p.centre===c).length;
                   const pct=visiblePairs.length?Math.round((count/visiblePairs.length)*100):0;
@@ -2333,13 +2412,13 @@ export default function App() {
               </div>
             )}
             <div style={S.card}>
-              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:14}}>RECENT ENTRIES</div>
+              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>RECENT ENTRIES</div>
               {pairs.slice(0,6).map(p=>(
                 <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:13}}>
                   <span style={{color:"#c8d4dc"}}>{p.recipient_name||p.donor_name}</span>
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
                     <span style={S.tag(URGENCY_COLORS[p.urgency]||"#5a6a7a")}>{p.urgency}</span>
-                    <span style={{color:"#6a8090",fontFamily:"'DM Mono', monospace",fontSize:13}}>
+                    <span style={{color:"#b0bec8",fontFamily:"'DM Mono', monospace",fontSize:13}}>
                       {p.created_at?new Date(p.created_at).toLocaleDateString():""}
                     </span>
                   </div>
@@ -2442,7 +2521,7 @@ export default function App() {
                       ?`⚠ ${affectedByWithdrawal} recipient${affectedByWithdrawal!==1?"s":""} would lose their best match`
                       :"✓ No recipients lose their best match"}
                   </span>
-                  <button onClick={()=>setWhatIfDonor(null)} style={{background:"none",border:"none",color:"#6a8090",cursor:"pointer",fontSize:13}}>Clear</button>
+                  <button onClick={()=>setWhatIfDonor(null)} style={{background:"none",border:"none",color:"#b0bec8",cursor:"pointer",fontSize:13}}>Clear</button>
                 </>
               )}
             </div>
@@ -2491,7 +2570,7 @@ export default function App() {
                           <div style={{fontFamily:"'DM Mono', monospace",fontSize:20,fontWeight:600,color:s.text,lineHeight:1}}>
                             {best.result.score??<span style={{fontSize:13}}>ABO ✓</span>}
                           </div>
-                          <div style={{fontSize:8,color:`${s.text}99`,marginTop:2,letterSpacing:"0.05em"}}>PAIR SCORE</div>
+                          <div style={{fontSize:13,color:`${s.text}cc`,marginTop:2,letterSpacing:"0.05em"}}>PAIR SCORE</div>
                         </div>
                       )}
                       {!best&&(
@@ -2510,14 +2589,14 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginBottom:4}}>
                           <span style={{fontSize:13,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
                           <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
-                          {dAge&&<span style={{fontSize:13,color:"#90a4b4"}}>Age {dAge}</span>}
-                          {best.donor.donor_egfr&&<span style={{fontSize:13,color:"#90a4b4"}}>eGFR {best.donor.donor_egfr}</span>}
+                          {dAge&&<span style={{fontSize:13,color:"#c4d0d9"}}>Age {dAge}</span>}
+                          {best.donor.donor_egfr&&<span style={{fontSize:13,color:"#c4d0d9"}}>eGFR {best.donor.donor_egfr}</span>}
                           {(()=>{
                             const dw=cleanWeight(best.donor.donor_weight_kg);
                             const rw=cleanWeight(recip.recipient_weight_kg);
                             if(!dw||!rw) return null;
                             const diff=Math.round(Math.abs(dw-rw)*10)/10;
-                            return <span style={{fontSize:13,color:"#90a4b4"}}>{diff}kg Δ</span>;
+                            return <span style={{fontSize:13,color:"#c4d0d9"}}>{diff}kg Δ</span>;
                           })()}
                           {best.result.oDonorIdeal&&<span style={{...S.tag("#4db882"),fontSize:13}}>O→O ✓</span>}
                           {best.result.oDonorPenalty<0&&<span style={{...S.tag("#ffd166"),fontSize:13}}>conserve O</span>}
@@ -2527,7 +2606,7 @@ export default function App() {
                         </div>
                         {/* Other compatible donors */}
                         {allMatches.length>1&&(
-                          <div style={{fontSize:13,color:"#6a8090",marginTop:4}}>
+                          <div style={{fontSize:13,color:"#b0bec8",marginTop:4}}>
                             +{allMatches.length-1} other compatible donor{allMatches.length>2?"s":""}: {allMatches.slice(1,3).map(m=>m.donor.donor_name?.split(" ")[0]).join(", ")}
                             {allMatches.length>3?` +${allMatches.length-3} more`:""}
                           </div>
@@ -2543,7 +2622,7 @@ export default function App() {
               })}
             </div>
             {recipientMatches.length===0&&(
-              <div style={{textAlign:"center",padding:60,color:"#6a8090"}}>
+              <div style={{textAlign:"center",padding:60,color:"#b0bec8"}}>
                 No active recipients in the registry yet.
               </div>
             )}
@@ -2618,7 +2697,7 @@ export default function App() {
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <p style={{...S.subtitle,margin:0}}>All entries are made by transplant coordinators on behalf of patients.</p>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#131c26",borderRadius:8,border:"1px solid #1e2d3d"}}>
-              <span style={{fontSize:13,color:"#90a4b4",fontFamily:"'DM Mono', monospace"}}>UNITS</span>
+              <span style={{fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace"}}>UNITS</span>
               {["metric","imperial"].map(u=>(
                 <button key={u} onClick={()=>setUnitSystem(u)}
                   style={{padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,fontFamily:"'DM Mono', monospace",
@@ -2683,7 +2762,7 @@ export default function App() {
                   </div>
                   <div style={{borderTop:"1px solid #1e2d3d",paddingTop:12}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#6a8090"}}>(optional)</span></label>
+                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#b0bec8"}}>(optional)</span></label>
                       <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:13,fontFamily:"'DM Mono', monospace"}}>
                         {showHLAAdvanced?"▲ hide":"▼ individual fields"}
                       </button>
@@ -2749,7 +2828,7 @@ export default function App() {
                   </div>
                   <div style={{borderTop:"1px solid #1e2d3d",paddingTop:12}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#6a8090"}}>(optional)</span></label>
+                      <label style={{...S.label,marginBottom:0}}>HLA TYPING <span style={{color:"#b0bec8"}}>(optional)</span></label>
                       <button onClick={()=>setShowHLAAdvanced(v=>!v)} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontSize:13,fontFamily:"'DM Mono', monospace"}}>
                         {showHLAAdvanced?"▲ hide":"▼ individual fields"}
                       </button>
@@ -2783,7 +2862,7 @@ export default function App() {
                         </button>
                       ))}
                     </div>
-                    <div style={{fontSize:13,color:"#6a8090",marginTop:5}}>
+                    <div style={{fontSize:13,color:"#b0bec8",marginTop:5}}>
                       {form.donor_priority==="Primary"&&"First-choice donor for this recipient — evaluated first in matching"}
                       {form.donor_priority==="Secondary"&&"Second-choice donor — evaluated if primary doesn't match"}
                       {form.donor_priority==="Tertiary"&&"Third-choice donor — fallback option if primary and secondary don't match"}
@@ -2848,10 +2927,10 @@ export default function App() {
               </div>
               {result.score!==null&&(
               <div style={{textAlign:"center",padding:"14px 22px",borderRadius:12,background:s.bg,border:`1px solid ${s.text}33`}}>
-                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:`${s.text}88`,letterSpacing:"0.1em",marginBottom:4}}>PAIR SCORE</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:`${s.text}aa`,letterSpacing:"0.1em",marginBottom:4}}>PAIR SCORE</div>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:40,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
                 <div style={{fontSize:13,color:`${s.text}cc`,marginTop:4,letterSpacing:"0.1em"}}>{s.label.toUpperCase()}</div>
-                <div style={{fontSize:13,color:`${s.text}66`,marginTop:6}}>out of 100</div>
+                <div style={{fontSize:13,color:`${s.text}cc`,marginTop:6}}>out of 100</div>
               </div>
               )}
             </div>
@@ -2871,12 +2950,12 @@ export default function App() {
                     <span style={{fontSize:13,color:"#b0bec5"}}>{label}</span>
                     <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:ok?"#2dd4a0":warn?"#ffd166":"#ff8a8a"}}>{value}</span>
                   </div>
-                  <div style={{fontSize:13,color:"#5a6a7a",marginTop:5}}>{detail}</div>
+                  <div style={{fontSize:13,color:"#b0bec8",marginTop:5}}>{detail}</div>
                 </div>
               ))}
             </div>
             <div style={{...S.card,marginBottom:16}}>
-              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",letterSpacing:"0.1em",marginBottom:12}}>HLA ALLELE COMPARISON</div>
+              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:12}}>HLA ALLELE COMPARISON</div>
               {(donor.donor_hla_notes||recipient.recipient_hla_notes)&&(
                 <div style={{marginBottom:12,fontSize:13,color:"#b0bec5"}}>
                   {donor.donor_hla_notes&&<div>Donor: <span style={{fontFamily:"'DM Mono', monospace",color:"#6ab4d0"}}>{donor.donor_hla_notes}</span></div>}
@@ -2885,7 +2964,7 @@ export default function App() {
               )}
               <table style={{width:"100%",borderCollapse:"collapse"}}>
                 <thead>
-                  <tr>{["LOCUS","DONOR","RECIPIENT","MM"].map(h=><th key={h} style={{textAlign:h==="LOCUS"?"left":"center",padding:"6px 10px",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#90a4b4",fontWeight:400}}>{h}</th>)}</tr>
+                  <tr>{["LOCUS","DONOR","RECIPIENT","MM"].map(h=><th key={h} style={{textAlign:h==="LOCUS"?"left":"center",padding:"6px 10px",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",fontWeight:400}}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {["A","B","DR"].map(locus=>{
