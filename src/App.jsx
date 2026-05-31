@@ -233,12 +233,6 @@ function scoreStyle(score, aboOnly) {
   return { bg: "#7a1010", text: "#ff9999", label: "Incompatible" };
 }
 
-const URGENCY_COLORS = { High: "#ff8a8a", Medium: "#ffd166", Low: "#6effc6" };
-const URGENCY_DEFS = {
-  High: "Needs transplant within weeks to months. Deteriorating on dialysis or medically urgent.",
-  Medium: "Stable but needs transplant within the year. Standard priority.",
-  Low: "Early evaluation or preemptive. Medically stable with longer window.",
-};
 const PAIR_TYPES = [
   { value: "paired", label: "Incompatible Pair", desc: "Recipient with a willing but incompatible donor" },
   { value: "altruistic", label: "Altruistic Donor", desc: "Willing donor with no paired recipient" },
@@ -262,7 +256,7 @@ const emptyForm = {
   donor_hla_dr1:"", donor_hla_dr2:"", donor_hla_notes:"",
   donor_egfr:"", donor_cmv:"Unknown", donor_backup:false, donor_zip:"",
   donor_priority:"Primary",
-  urgency:"Medium", status:"active", notes:"", centre:"",
+  status:"active", notes:"", centre:"",
 };
 
 // ── CSV ────────────────────────────────────────────────────────────────────
@@ -446,7 +440,6 @@ function exportMatches(pairs, level="standard") {
         donor_egfr:       donor.donor_egfr||"",
         donor_cmv:        donor.donor_cmv||"",
         recipient_cmv:    recipient.recipient_cmv||"",
-        urgency:          recipient.urgency||"",
         hla_notes:        recipient.recipient_hla_notes||donor.donor_hla_notes||"",
       });
     });
@@ -458,8 +451,8 @@ function exportMatches(pairs, level="standard") {
     header = "Pair Score,Recipient,Blood Type,PRA %,Waitlist Duration,Waitlist Rank,Donor,Blood Type,Flags";
     lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.waitlist_duration,r.waitlist_rank,r.donor,r.donor_blood,r.flags].join(","));
   } else if(level==="full"){
-    header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Date,Waitlist Duration,Waitlist Rank,Weight (kg),CMV,Urgency,Donor,Blood Type,Age,Weight (kg),eGFR,CMV,Weight Gap (kg),Flags,HLA Notes";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.recipient_cmv,r.urgency,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.flags,r.hla_notes].join(","));
+    header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Date,Waitlist Duration,Waitlist Rank,Weight (kg),CMV,Donor,Blood Type,Age,Weight (kg),eGFR,CMV,Weight Gap (kg),Flags,HLA Notes";
+    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.recipient_cmv,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.flags,r.hla_notes].join(","));
   } else {
     header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Duration,Waitlist Rank,Weight (kg),Donor,Blood Type,Age,Weight (kg),Weight Gap (kg),Flags";
     lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.weight_gap_kg,r.flags].join(","));
@@ -483,7 +476,7 @@ function parseCSV(text, userId) {
     headers.forEach((h,i) => { obj[h] = vals[i]||""; });
     if (obj.recipient_dob) { const p=obj.recipient_dob.split("/"); if(p.length===3) obj.recipient_year_born=p[2].length===4?p[2]:`20${p[2]}`; }
     if (obj.donor_dob) { const p=obj.donor_dob.split("/"); if(p.length===3) obj.donor_year_born=p[2].length===4?p[2]:`20${p[2]}`; }
-    obj.status="active"; obj.urgency=obj.urgency||"Medium"; obj.pair_type=obj.pair_type||"paired";
+    obj.status="active"; obj.pair_type=obj.pair_type||"paired";
     obj.donor_backup=false; obj.user_id=userId;
     NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined) obj[k]=null;});
     ["donor_blood_type","recipient_blood_type"].forEach(k=>{if(!["A","B","AB","O"].includes(obj[k])) obj[k]=null;});
@@ -517,7 +510,6 @@ const PAIRPATH_FIELDS = [
   {key:"donor_cmv",label:"Donor CMV",required:false,types:["paired","altruistic"]},
   {key:"donor_hla_notes",label:"Donor HLA Notes",required:false,types:["paired","altruistic"]},
   {key:"donor_zip",label:"Donor ZIP",required:false,types:["paired","altruistic"]},
-  {key:"urgency",label:"Urgency",required:false,types:["paired","altruistic","recipient_only"]},
   {key:"notes",label:"Clinical Notes",required:false,types:["paired","altruistic","recipient_only"]},
   {key:"centre",label:"Centre",required:false,types:["paired","altruistic","recipient_only"]},
 ];
@@ -563,7 +555,6 @@ function autoDetect(headers, pairType="paired") {
     {keys:["cmv"],field:isDonorOnly?"donor_cmv":"recipient_cmv"},
     {keys:["dob","date of birth","birth date","date_of_birth"],field:isDonorOnly?"donor_year_born":"recipient_year_born"},
     // Shared fields
-    {keys:["urgency","priority"],field:"urgency"},
     {keys:["notes","clinical_notes","comments"],field:"notes"},
     {keys:["centre","center","hospital","program"],field:"centre"},
   ];
@@ -935,14 +926,14 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
 
 // ── Demo Data ──────────────────────────────────────────────────────────────
 const DEMO_PAIRS = [
-  {id:"d1",pair_type:"paired",status:"active",urgency:"High",recipient_name:"R1",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"D1",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
-  {id:"d2",pair_type:"paired",status:"active",urgency:"High",recipient_name:"R2",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"D2",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
-  {id:"d3",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"R3",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"D3",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
-  {id:"d4",pair_type:"altruistic",status:"active",urgency:"Medium",donor_name:"D4",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
-  {id:"d5",pair_type:"paired",status:"active",urgency:"Medium",recipient_name:"R4",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"D5",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
-  {id:"d6",pair_type:"recipient_only",status:"active",urgency:"High",recipient_name:"R5",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
-  {id:"d7",pair_type:"paired",status:"active",urgency:"Low",recipient_name:"R6",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"D6",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
-  {id:"d8",pair_type:"paired",status:"matched",urgency:"High",recipient_name:"R7",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"D7",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
+  {id:"d1",pair_type:"paired",status:"active",recipient_name:"R1",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"D1",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
+  {id:"d2",pair_type:"paired",status:"active",recipient_name:"R2",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"D2",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
+  {id:"d3",pair_type:"paired",status:"active",recipient_name:"R3",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"D3",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
+  {id:"d4",pair_type:"altruistic",status:"active",donor_name:"D4",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
+  {id:"d5",pair_type:"paired",status:"active",recipient_name:"R4",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"D5",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
+  {id:"d6",pair_type:"recipient_only",status:"active",recipient_name:"R5",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
+  {id:"d7",pair_type:"paired",status:"active",recipient_name:"R6",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"D6",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
+  {id:"d8",pair_type:"paired",status:"matched",recipient_name:"R7",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"D7",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
 ];
 
 // ── Main App ───────────────────────────────────────────────────────────────
@@ -958,7 +949,6 @@ export default function App() {
   const [hoveredCell,setHoveredCell]=useState(null);
   const [search,setSearch]=useState("");
   const [filterStatus,setFilterStatus]=useState("active");
-  const [filterUrgency,setFilterUrgency]=useState("all");
   const [filterBlood,setFilterBlood]=useState("all");
   const [filterDonorBlood,setFilterDonorBlood]=useState("all");
   const [filterCentre,setFilterCentre]=useState("all");
@@ -1099,7 +1089,6 @@ export default function App() {
 
   const filteredPairs=visiblePairs.filter(p=>{
     if(filterStatus!=="all"&&p.status!==filterStatus) return false;
-    if(filterUrgency!=="all"&&p.urgency!==filterUrgency) return false;
     if(filterBlood!=="all"&&p.recipient_blood_type!==filterBlood&&p.donor_blood_type!==filterBlood) return false;
     if(filterCentre!=="all"&&p.centre!==filterCentre) return false;
     if(filterPairType!=="all"&&p.pair_type!==filterPairType) return false;
@@ -1112,10 +1101,8 @@ export default function App() {
     return true;
   }).sort((a,b)=>{
     const donors=activePairs.filter(p=>p.donor_blood_type);
-    const urgencyRank={High:0,Medium:1,Low:2};
     function getVal(p,key){
       if(key==="date") return new Date(p.created_at).getTime();
-      if(key==="urgency") return urgencyRank[p.urgency]??1;
       if(key==="lastname") return (p.recipient_name||p.donor_name||"").split(" ").pop().toLowerCase();
       if(key==="pra") return parseFloat(p.recipient_pra_percent||0);
       if(key==="dialysis") return new Date(p.recipient_dialysis_start||0).getTime();
@@ -1134,7 +1121,6 @@ export default function App() {
   const chains=computedChains;
   const stats={
     total:visiblePairs.length,active:activePairs.length,
-    highUrgency:activePairs.filter(p=>p.urgency==="High").length,
     completed:visiblePairs.filter(p=>p.status==="completed").length,
     withdrawn:visiblePairs.filter(p=>p.status==="withdrawn").length,
     withMatch:activePairs.filter(p=>p.recipient_blood_type&&activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length,
@@ -1622,7 +1608,7 @@ export default function App() {
     function processRows(headers, dataRows){
       return dataRows.filter(r=>r.some?.(c=>c!=="")).map(row=>{
         const vals=Array.isArray(row)?row:headers.map(h=>row[h]??"");
-        const obj={pair_type:pairType,status:"active",urgency:"Medium",donor_backup:false,user_id:currentUserId,user_email:userEmail};
+        const obj={pair_type:pairType,status:"active",donor_backup:false,user_id:currentUserId,user_email:userEmail};
         headers.forEach((h,i)=>{
           const field=mapping[h];
           if(field) obj[field]=String(vals[i]??"").trim();
@@ -1902,7 +1888,7 @@ export default function App() {
             {[
               {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · PRA%","cols":"6 columns — for a fast first look in a meeting"},
               {level:"standard",label:"Standard",desc:"+ Age · Waitlist Date · Weights · Weight Gap","cols":"12 columns — recommended for most presentations"},
-              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · Urgency · HLA Notes","cols":"17 columns — for detailed clinical review"},
+              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · HLA Notes","cols":"17 columns — for detailed clinical review"},
             ].map(({level,label,desc,cols})=>(
               <button key={level} onClick={()=>{exportMatches(visiblePairs,level);setShowMatchExport(false);}}
                 style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
@@ -2007,7 +1993,6 @@ export default function App() {
             {demoMode?"● DEMO":"DEMO"}
           </button>
           {demoMode&&<span style={{fontSize:13,color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>demo data — not saved</span>}
-          {stats.highUrgency>0&&!demoMode&&<span style={S.tag("#ff8a8a")}>{stats.highUrgency} HIGH URGENCY</span>}
         </div>
         <nav style={{display:"flex",gap:2}}>
           {[["grid","Grid"],["registry","Registry"],["matches","Matches"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l])=>(
@@ -2081,7 +2066,6 @@ export default function App() {
                     <tr key={recipient.id} style={{background:recipient.id===flash?"#0d2a1e":ri%2===0?"#0d1219":"#0c1018",transition:"background 0.5s"}}>
                       <td style={{padding:"10px 16px",borderBottom:"1px solid #141c24",borderRight:"1px solid #1e2d3d"}}>
                         <div style={{display:"flex",alignItems:"center",gap:10}}>
-                          <div style={{width:10,height:10,borderRadius:"50%",background:URGENCY_COLORS[recipient.urgency]||"#5a6a7a",flexShrink:0}} title={URGENCY_DEFS[recipient.urgency]}/>
                           <div>
                             <div style={{fontSize:13,fontWeight:600,color:"#ffffff"}}>{recipient.recipient_name}</div>
                             <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec5",marginTop:2}}>
@@ -2193,10 +2177,6 @@ export default function App() {
               <option value="all">All Status</option>
               {STATUS_OPTIONS.map(s=><option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
-            <select value={filterUrgency} onChange={e=>setFilterUrgency(e.target.value)} style={{...S.select,width:120}}>
-              <option value="all">All Urgency</option>
-              {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
-            </select>
             <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:130}}>
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
@@ -2225,7 +2205,6 @@ export default function App() {
                   <option value="score">Best Match Score</option>
                   <option value="dialysis">Time on Dialysis</option>
                   <option value="pra">PRA % (sensitization)</option>
-                  <option value="urgency">Urgency</option>
                   <option value="lastname">Last Name</option>
                 </select>
                 <button onClick={()=>{const ns=[...sortStack];ns[i]={...ns[i],dir:ns[i].dir==="desc"?"asc":"desc"};setSortStack(ns);}}
@@ -2293,7 +2272,6 @@ export default function App() {
                 <div key={pair.id} style={{...S.card,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",borderColor:isSelected?"#2dd4a066":"#1e2d3d",background:isSelected?"#0d1a14":"#131c26"}}>
                   {canEdit&&<input type="checkbox" checked={isSelected} onChange={()=>toggleSelect(pair.id)} style={{cursor:"pointer",width:16,height:16,flexShrink:0}}/>}
                   {!canEdit&&<div style={{width:16,height:16,flexShrink:0}}/>}
-                  <div style={{width:6,height:44,borderRadius:3,background:URGENCY_COLORS[pair.urgency]||"#6a8090",flexShrink:0}} title={pair.urgency}/>
                   <span style={S.tag("#7a90a0")}>{pairTypeLabel(pair.pair_type)}</span>
                   <div style={{flex:1,minWidth:180}}>
                     {pair.recipient_name&&(
@@ -2301,7 +2279,6 @@ export default function App() {
                         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
                           <span style={{fontSize:14,fontWeight:600,color:"#ffffff"}}>{pair.recipient_name}</span>
                           {pair.recipient_blood_type&&<span style={S.tag("#3d8c6e")}>{pair.recipient_blood_type}</span>}
-                          {pair.urgency==="High"&&<span style={S.tag("#ff8a8a")}>URGENT</span>}
                           {pair.recipient_pra_percent>80&&<span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
                         </div>
                         <div style={{fontSize:13,color:"#b0bec5"}}>
@@ -2440,7 +2417,6 @@ export default function App() {
             {[
               {label:"Total Entries",value:stats.total,color:"#b0bec5"},
               {label:"Active",value:stats.active,color:"#4db882"},
-              {label:"High Urgency",value:stats.highUrgency,color:"#ff8a8a"},
               {label:"With Match",value:stats.withMatch,color:"#6effc6"},
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
@@ -2475,20 +2451,6 @@ export default function App() {
                 );
               })}
             </div>
-            <div style={S.card}>
-              <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>HIGH URGENCY — NO MATCH YET</div>
-              {activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length===0?(
-                <div style={{fontSize:13,color:"#4db882"}}>All high urgency recipients have at least one compatible match ✓</div>
-              ):(
-                activePairs.filter(p=>p.urgency==="High"&&p.recipient_blood_type&&!activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).map(p=>(
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,fontSize:13}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:"#ff8a8a",flexShrink:0}}/>
-                    <span style={{color:"#ffffff"}}>{p.recipient_name}</span>
-                    <span style={{color:"#b0bec5"}}>· {p.recipient_blood_type} · PRA {p.recipient_pra_percent||"?"}%</span>
-                  </div>
-                ))
-              )}
-            </div>
             {appMode==="national"&&centres.length>0&&(
               <div style={S.card}>
                 <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#c4d0d9",letterSpacing:"0.1em",marginBottom:14}}>ENTRIES BY CENTER</div>
@@ -2515,7 +2477,6 @@ export default function App() {
                 <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:13}}>
                   <span style={{color:"#c8d4dc"}}>{p.recipient_name||p.donor_name}</span>
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                    <span style={S.tag(URGENCY_COLORS[p.urgency]||"#5a6a7a")}>{p.urgency}</span>
                     <span style={{color:"#b0bec8",fontFamily:"'DM Mono', monospace",fontSize:13}}>
                       {p.created_at?new Date(p.created_at).toLocaleDateString():""}
                     </span>
@@ -2647,7 +2608,6 @@ export default function App() {
                           <span style={{fontSize:14,fontWeight:700,color:"#ffffff"}}>{recip.recipient_name||"Unnamed"}</span>
                           <span style={S.tag("#3d8c6e")}>{recip.recipient_blood_type}</span>
                           {pra>80&&<span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
-                          {recip.urgency==="High"&&<span style={S.tag("#ff8a8a")}>URGENT</span>}
                         </div>
                         <div style={{fontSize:13,color:"#b0bec5",display:"flex",gap:8,flexWrap:"wrap"}}>
                           {rAge&&<span>Age {rAge}</span>}
@@ -2974,11 +2934,6 @@ export default function App() {
 
           <div style={{...S.card,marginBottom:20}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-              <div><label style={S.label}>URGENCY *</label>
-                <select value={form.urgency} onChange={e=>setForm(f=>({...f,urgency:e.target.value}))} style={S.select}>
-                  {["High","Medium","Low"].map(u=><option key={u} value={u}>{u} — {URGENCY_DEFS[u].split(".")[0]}</option>)}
-                </select>
-              </div>
               {form.pair_type==="paired"&&(
                 <div><label style={S.label}>DONOR-RECIPIENT RELATIONSHIP</label>
                   <select value={form.recipient_relationship} onChange={e=>setForm(f=>({...f,recipient_relationship:e.target.value}))} style={S.select}>
