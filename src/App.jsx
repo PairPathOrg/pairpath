@@ -2603,7 +2603,7 @@ export default function App() {
             <div style={{padding:"12px 16px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52",marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
               <span style={{fontSize:13,color:"#4db882",fontFamily:"'DM Mono', monospace",letterSpacing:"0.08em",fontWeight:600,flexShrink:0}}>WHAT IF</span>
               <select value={whatIfDonor||""} onChange={e=>setWhatIfDonor(e.target.value||null)}
-                style={{...S.select,width:240,fontSize:13,background:"#0d1219",border:"1px solid #2a3d52",color:"#ffffff"}}>
+                style={{...S.select,width:320,fontSize:13,background:"#0d1219",border:"1px solid #2a3d52",color:"#ffffff"}}>
                 <option value="">— a donor withdraws from the registry?</option>
                 {donors.map(d=><option key={d.id} value={d.id}>{d.donor_name||"Unnamed"} · {d.donor_blood_type}</option>)}
               </select>
