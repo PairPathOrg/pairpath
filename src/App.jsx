@@ -1313,21 +1313,25 @@ export default function App() {
         return {name,headers,preview,dataRows,fingerprint};
       }).filter(Boolean);
       if(!sheets.length){setUploadResult({success:false,message:"No data found in workbook."});setUploading(false);return;}
-      // Name detection — auto-anonymize every sheet before opening the mapper (no modal/choice)
+      // Auto-anonymize EVERY sheet into ONE shared lookup before opening the mapper (no modal/choice).
+      // Infer each sheet's type from its name so D/R prefixes are correct and the mapper defaults right:
+      //   "Donors" sheet → altruistic (D prefix), "Recipients" sheet → recipient_only (R prefix).
+      const anonCtx=makeAnonContext();
       const cleanedSheets=sheets.map(sheet=>{
-        const flagged=detectRealNames(sheet.headers, sheet.dataRows);
-        if(flagged.length>0){
-          const anonymized=autoAnonymize(sheet.headers, sheet.dataRows, sheet.pairType||"paired");
-          const preview=anonymized.slice(0,3).map(row=>{
-            const obj={};sheet.headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
-          });
-          return {...sheet, dataRows:anonymized, preview, wasAnonymized:true, flagCount:flagged.length};
-        }
-        return sheet;
+        const sn=String(sheet.name).toLowerCase();
+        const pairType = sn.includes("donor") ? "altruistic"
+          : sn.includes("recipient") ? "recipient_only"
+          : (sheet.pairType||"paired");
+        const dataRows=anonymizeInto(sheet.headers, sheet.dataRows, pairType, anonCtx);
+        const preview=dataRows.slice(0,3).map(row=>{
+          const obj={};sheet.headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
+        });
+        return {...sheet, pairType, dataRows, preview};
       });
-      const totalFlagged=cleanedSheets.filter(s=>s.wasAnonymized).reduce((a,s)=>a+s.flagCount,0);
-      if(totalFlagged>0){
-        setUploadResult({success:true, message:`⚠ ${totalFlagged} name${totalFlagged!==1?"s":""} detected and auto-anonymized. Lookup table downloaded — keep it private.`});
+      const totalIds=anonCtx.donorNames.size+anonCtx.recipNames.size;
+      if(totalIds>0){
+        downloadCombinedLookup(anonCtx); // single combined file for the whole workbook
+        setUploadResult({success:true, message:`⚠ ${totalIds} name${totalIds!==1?"s":""} detected and auto-anonymized into one combined lookup table — downloaded. Keep it private.`});
       }
       setXlsxSheets(cleanedSheets);
       setXlsxResults([]);
@@ -1377,17 +1381,32 @@ export default function App() {
     return [...flagged];
   }
 
-  function autoAnonymize(headers, rows, pairType){
-    // Works on RAW header+row arrays BEFORE field mapping. Scan every name-bearing
-    // column by its original header, classify donor vs recipient, and replace any
-    // value looksLikeRealName accepts with a D#/R# ID. Does NOT rely on mapped keys.
-    // Split first/last columns are combined per row so one person gets ONE ID.
-    const donorNames=new Map(), recipNames=new Map();
-    let dCount=1, rCount=1;
-    const idFor=(role,key)=>{
-      const map=role==="donor"?donorNames:recipNames;
-      if(!map.has(key)) map.set(key, role==="donor"?`D${dCount++}`:`R${rCount++}`);
-      return map.get(key);
+  // Shared anonymization context — lets one combined lookup span multiple sheets.
+  function makeAnonContext(){ return {donorNames:new Map(), recipNames:new Map()}; }
+  // Sequential per-role IDs (D1,D2… / R1,R2…) that continue across every sheet sharing the ctx.
+  function anonIdFor(ctx, role, key){
+    const map=role==="donor"?ctx.donorNames:ctx.recipNames;
+    if(!map.has(key)) map.set(key,(role==="donor"?"D":"R")+(map.size+1));
+    return map.get(key);
+  }
+  // Build + download ONE combined lookup CSV for the whole context: ID, Full Name, Role.
+  function downloadCombinedLookup(ctx){
+    const lines=["ID,Full Name,Role"];
+    ctx.donorNames.forEach((id,name)=>lines.push(`${id},"${name}",Donor`));
+    ctx.recipNames.forEach((id,name)=>lines.push(`${id},"${name}",Recipient`));
+    const blob=new Blob([lines.join("\n")],{type:"text/csv"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="PairPath_ID_Lookup.csv";a.click();
+  }
+  // Anonymize one sheet's RAW header+row arrays into the shared ctx. Returns new rows; NO download.
+  // Role is driven by pairType: altruistic→donor (D), recipient_only→recipient (R),
+  // paired→decided per column from its header. Split first/last columns combine into ONE id per person.
+  function anonymizeInto(headers, rows, pairType, ctx){
+    const roleOf=(hl)=>{
+      if(pairType==="altruistic") return "donor";
+      if(pairType==="recipient_only") return "recipient";
+      const isDonor=hl.includes("donor")||hl.includes("ld ")||hl.startsWith("ld")||
+        hl.startsWith("d ")||hl.startsWith("d_");
+      return isDonor?"donor":"recipient";
     };
     // Identify name columns by header — same predicate looksLikeRealName uses, plus first/last/surname
     const cols=headers.map((h,i)=>{
@@ -1397,22 +1416,20 @@ export default function App() {
         hl.startsWith("ld")||hl.startsWith("r ")||hl==="r"||
         hl.includes("first")||hl.includes("last")||hl.includes("surname");
       if(!isName) return null;
-      const isDonor=hl.includes("donor")||hl.includes("ld ")||hl.startsWith("ld")||
-        hl.startsWith("d ")||hl.startsWith("d_");
       const part=hl.includes("first")?"first":(hl.includes("last")||hl.includes("surname")?"last":"full");
-      return {index:i, header:h, role:isDonor?"donor":"recipient", part};
+      return {index:i, header:h, role:roleOf(hl), part};
     }).filter(Boolean);
     const fullCols=cols.filter(c=>c.part==="full");
     const splitCols=cols.filter(c=>c.part!=="full");
     const getVal=(row,i,h)=>Array.isArray(row)?row[i]:row[h];
     const setVal=(row,i,h,v)=>{if(Array.isArray(row)){if(i>=0)row[i]=v;}else row[h]=v;};
-    const anonymized=rows.map(row=>{
+    return rows.map(row=>{
       const newRow=Array.isArray(row)?[...row]:{...row};
       // Full-name columns — one ID per value
       fullCols.forEach(({index,header,role})=>{
         const val=getVal(row,index,header);
         if(!looksLikeRealName(val, header)) return;
-        setVal(newRow,index,header, idFor(role, String(val).trim()));
+        setVal(newRow,index,header, anonIdFor(ctx, role, String(val).trim()));
       });
       // Split first/last columns — combine per role into ONE ID, then blank the extra cells
       ["donor","recipient"].forEach(role=>{
@@ -1424,19 +1441,19 @@ export default function App() {
         const combined=[firstVal,lastVal].filter(Boolean).join(" ").trim();
         // Synthetic header guarantees the name-column gate; value checks do the real work
         if(!combined||!looksLikeRealName(combined, role==="donor"?"donor_name":"recipient_name")) return;
-        const id=idFor(role, combined);
+        const id=anonIdFor(ctx, role, combined);
         // Put the ID in the first column, blank the rest so concatenation yields just the ID
         [...fCols,...lCols].forEach((c,k)=> setVal(newRow,c.index,c.header, k===0?id:""));
       });
       return newRow;
     });
-    // Generate lookup CSV
-    const lookupLines=["ID,Full Name,Role"];
-    donorNames.forEach((id,name)=>lookupLines.push(`${id},"${name}",Donor`));
-    recipNames.forEach((id,name)=>lookupLines.push(`${id},"${name}",Recipient`));
-    const blob=new Blob([lookupLines.join("\n")],{type:"text/csv"});
-    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="PairPath_ID_Lookup.csv";a.click();
-    return anonymized;
+  }
+  // CSV single-sheet path — anonymize one sheet and download its lookup immediately.
+  function autoAnonymize(headers, rows, pairType){
+    const ctx=makeAnonContext();
+    const out=anonymizeInto(headers, rows, pairType, ctx);
+    downloadCombinedLookup(ctx);
+    return out;
   }
 
   async function processFileWithType(pairType){
