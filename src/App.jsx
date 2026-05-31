@@ -960,6 +960,7 @@ export default function App() {
   const [filterStatus,setFilterStatus]=useState("active");
   const [filterUrgency,setFilterUrgency]=useState("all");
   const [filterBlood,setFilterBlood]=useState("all");
+  const [filterDonorBlood,setFilterDonorBlood]=useState("all");
   const [filterCentre,setFilterCentre]=useState("all");
   const [filterPairType,setFilterPairType]=useState("all");
   const [sortStack,setSortStack]=useState([{key:"date",dir:"desc"}]);
@@ -2037,6 +2038,10 @@ export default function App() {
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
+            <select value={filterDonorBlood} onChange={e=>setFilterDonorBlood(e.target.value)} style={{...S.select,width:140}}>
+              <option value="all">All Donor Types</option>
+              {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
+            </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
               {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:13,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
@@ -2059,7 +2064,7 @@ export default function App() {
                     <th style={{padding:"12px 16px",textAlign:"left",fontSize:13,color:"#c4d0d9",fontFamily:"'DM Mono', monospace",letterSpacing:"0.08em",fontWeight:400,borderBottom:"1px solid #1e2d3d",borderRight:"1px solid #1e2d3d",minWidth:190}}>
                       RECIPIENT ↓ / DONOR →
                     </th>
-                    {activePairs.filter(p=>p.donor_blood_type).map(p=>(
+                    {activePairs.filter(p=>p.donor_blood_type).filter(p=>filterDonorBlood==="all"||p.donor_blood_type===filterDonorBlood).map(p=>(
                       <th key={p.id} style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #1e2d3d",borderRight:"1px solid #1e2d3d",minWidth:90}}>
                         <div style={{fontSize:13,fontWeight:600,color:"#ffffff"}}>{(p.donor_name||"Altruistic").split(" ")[0]}</div>
                         <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#4db882",marginTop:2}}>{p.donor_blood_type}</div>
@@ -2086,7 +2091,7 @@ export default function App() {
                           </div>
                         </div>
                       </td>
-                      {activePairs.filter(p=>p.donor_blood_type).map(donor=>{
+                      {activePairs.filter(p=>p.donor_blood_type).filter(p=>filterDonorBlood==="all"||p.donor_blood_type===filterDonorBlood).map(donor=>{
                         if(donor.id===recipient.id) return <td key={donor.id} style={{textAlign:"center",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:"#131c26",color:"#2a3a4a"}}>—</td>;
                         const result=calculateCompatibility(donor,recipient);
                         // Never blank: null/undefined score (missing data) renders as a red 0 = ABO incompatible
