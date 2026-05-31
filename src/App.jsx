@@ -2094,17 +2094,19 @@ export default function App() {
                       {activePairs.filter(p=>p.donor_blood_type).map(donor=>{
                         if(donor.id===recipient.id) return <td key={donor.id} style={{textAlign:"center",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:"#131c26",color:"#2a3a4a"}}>—</td>;
                         const result=calculateCompatibility(donor,recipient);
-                        const s=scoreStyle(result.score,result.aboOnly);
+                        // Never blank: null/undefined score (missing data) renders as a red 0 = ABO incompatible
+                        const scoreVal=result.score??0;
+                        const s=scoreStyle(scoreVal,result.aboOnly);
                         const cellKey=`${donor.id}-${recipient.id}`;
                         return (
                           <td key={donor.id}
                             onMouseEnter={()=>setHoveredCell(cellKey)}
                             onMouseLeave={()=>setHoveredCell(null)}
                             onClick={()=>openDetail(donor,recipient)}
-                            title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+result.reasons.hlaMismatches} | ${s.label}`}
+                            title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+(result.reasons.hlaMismatches??0)} | ${s.label}`}
                             style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
-                            <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{result.score}</div>
-                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches}MM`}</div>
+                            <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{scoreVal}</div>
+                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches??0}MM`}</div>
                           </td>
                         );
                       })}
