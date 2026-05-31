@@ -2035,7 +2035,7 @@ export default function App() {
           <p style={S.subtitle}>Click any cell for a full breakdown. Pair Score is 0–100 when HLA data is entered. ABO ✓ shown when HLA is missing.</p>
           <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap",alignItems:"center"}}>
             <select value={filterBlood} onChange={e=>setFilterBlood(e.target.value)} style={{...S.select,width:140}}>
-              <option value="all">All Blood Types</option>
+              <option value="all">All Rec Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
             <select value={filterDonorBlood} onChange={e=>setFilterDonorBlood(e.target.value)} style={{...S.select,width:140}}>
