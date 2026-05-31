@@ -122,6 +122,8 @@ function findChains(pairs) {
     id: `d-${p.id}`, pairId: p.id, blood: p.donor_blood_type,
     name: p.donor_name || "Altruistic Donor", weight: p.donor_weight_kg,
     cmv: p.donor_cmv, year: p.donor_year_born, pair_type: p.pair_type,
+    // Altruistic = explicitly typed, or a donor with no paired recipient of their own
+    isAltruistic: p.pair_type === "altruistic" || (!!p.donor_blood_type && !p.recipient_blood_type),
   }));
 
   const recipients = active.filter(p => p.recipient_blood_type).map(p => ({
@@ -169,12 +171,16 @@ function findChains(pairs) {
         recipientBlood: recipient.blood,
         recipientPairId: recipient.pairId,
         score: s,
-        altruistic: donor.pair_type === "altruistic"
+        altruistic: donor.isAltruistic
       };
 
       chain.push(step);
 
-      if (chain.length >= 2) {
+      // Altruistic-started chains are valid from a single edge (altruistic donor →
+      // compatible recipient, e.g. a standalone recipient-only entry that ends the chain).
+      // Paired-started chains still require ≥2 edges to be a meaningful exchange (existing logic).
+      const minLen = chain[0].altruistic ? 1 : 2;
+      if (chain.length >= minLen) {
         allChains.push([...chain]);
       }
 
@@ -201,9 +207,15 @@ function findChains(pairs) {
   // "Marcus→Patrick→Brigid→Carmen→Sinead→X" already exists with the same 4 starts.
   // Key each chain by its ordered donor pair IDs.
   const donorSequence = chain => chain.map(c => c.donorPairId).join(',');
+  // A chain is "terminal" (a complete exchange) when its last recipient has no onward
+  // donor — i.e. a standalone recipient-only entry ends it. Terminal chains are never
+  // truncations of a longer chain, so they must not be suppressed by the prefix filter.
+  const isTerminal = chain => !donorByPair.has(chain[chain.length - 1].recipientPairId);
 
-  // Keep only chains where no longer chain starts with the same donor sequence
+  // Keep only chains where no longer chain starts with the same donor sequence —
+  // except terminal chains, which are complete and always kept.
   const filtered = allChains.filter(chain => {
+    if (isTerminal(chain)) return true;
     const seq = donorSequence(chain);
     return !allChains.some(other =>
       other.length > chain.length &&
@@ -211,10 +223,14 @@ function findChains(pairs) {
     );
   });
 
-  // Among remaining, deduplicate by exact donor sequence
+  // Deduplicate by donor sequence; terminal chains also key on their end recipient so
+  // distinct standalone-recipient endings (e.g. an altruistic donor's options) aren't collapsed.
+  const chainKey = chain => isTerminal(chain)
+    ? donorSequence(chain) + '|end:' + chain[chain.length - 1].recipientPairId
+    : donorSequence(chain);
   const seenSeqs = new Set();
   const deduped = filtered.filter(chain => {
-    const seq = donorSequence(chain);
+    const seq = chainKey(chain);
     if (seenSeqs.has(seq)) return false;
     seenSeqs.add(seq);
     return true;
