@@ -860,8 +860,13 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
   const relevantFields = PAIRPATH_FIELDS.filter(f => f.types.includes(pairType));
   const requiredFields = relevantFields.filter(f => f.required);
   
-  // Only count a required field as missing if it's relevant to this pair type
-  const missingRequired = requiredFields.filter(f => !Object.values(mapping).includes(f.key));
+  // Only count a required field as missing if it's relevant to this pair type.
+  // Also drop cross-type fields by key prefix: recipient_only hides donor_*, altruistic hides recipient_*.
+  const missingRequired = requiredFields.filter(f => {
+    if(pairType==="recipient_only" && f.key.startsWith("donor_")) return false;
+    if(pairType==="altruistic" && f.key.startsWith("recipient_")) return false;
+    return !Object.values(mapping).includes(f.key);
+  });
   
   // Clean mapping — remove any mapped fields not relevant to current pairType
   const cleanedMapping = Object.fromEntries(
