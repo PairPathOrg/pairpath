@@ -2037,10 +2037,6 @@ export default function App() {
               <option value="all">All Blood Types</option>
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
-            <select value={filterUrgency} onChange={e=>setFilterUrgency(e.target.value)} style={{...S.select,width:130}}>
-              <option value="all">All Urgency</option>
-              {["High","Medium","Low"].map(u=><option key={u}>{u}</option>)}
-            </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
               {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:13,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
@@ -2076,7 +2072,6 @@ export default function App() {
                 <tbody>
                   {activePairs.filter(p=>p.recipient_blood_type)
                     .filter(p=>filterBlood==="all"||p.recipient_blood_type===filterBlood)
-                    .filter(p=>filterUrgency==="all"||p.urgency===filterUrgency)
                     .map((recipient,ri)=>(
                     <tr key={recipient.id} style={{background:recipient.id===flash?"#0d2a1e":ri%2===0?"#0d1219":"#0c1018",transition:"background 0.5s"}}>
                       <td style={{padding:"10px 16px",borderBottom:"1px solid #141c24",borderRight:"1px solid #1e2d3d"}}>
