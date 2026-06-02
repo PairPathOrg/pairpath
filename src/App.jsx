@@ -1262,9 +1262,13 @@ export default function App() {
   const userDomain=userEmail.includes("@")?userEmail.split("@")[1].toLowerCase():"";
   // Special domains that shouldn't be used for grouping (personal emails)
   const PERSONAL_DOMAINS=["gmail.com","yahoo.com","hotmail.com","outlook.com","icloud.com","me.com","aol.com","protonmail.com","mail.com"];
-  const hasCentreDomain=userDomain&&!PERSONAL_DOMAINS.includes(userDomain);
-  // Centre grouping: if user has institutional email, show all data from same domain
-  // If personal email, fall back to own data only
+  // A personal email (gmail/yahoo/etc.) — or a missing domain — means a solo user, never a center.
+  const isPersonalEmail=!userDomain||PERSONAL_DOMAINS.includes(userDomain);
+  const hasCentreDomain=!isPersonalEmail;
+  // Centre grouping:
+  //  - Institutional email → share all entries from the same email domain (the center's team).
+  //  - Personal email → isolated to THIS user's own entries only, so two different personal-email
+  //    users (e.g. two separate Gmail accounts) never see each other's data, regardless of provider.
   const sameDomainPairs=hasCentreDomain
     ?pairs.filter(p=>{
         if(!p.user_email) return p.user_id===currentUserId; // legacy entries without email
@@ -1282,7 +1286,14 @@ export default function App() {
   const centres=[...new Set(visiblePairs.map(p=>p.centre).filter(Boolean))];
   // Center options for the registry filter: explicit centre field OR derived from email domain.
   // For admins, visiblePairs spans every domain, so this lists all centers to isolate one at a time.
-  const centreOptions=[...new Set(visiblePairs.map(pairCentre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  // Personal-email users (gmail/yahoo/etc.) are solo users, NOT centers — exclude their entries
+  // so only institutional email domains surface as selectable centers.
+  const centreOptions=[...new Set(
+    visiblePairs
+      .filter(p=>{const d=p.user_email?p.user_email.split("@")[1]?.toLowerCase():"";return !PERSONAL_DOMAINS.includes(d);})
+      .map(pairCentre)
+      .filter(Boolean)
+  )].sort((a,b)=>a.localeCompare(b));
 
   const filteredPairs=visiblePairs.filter(p=>{
     if(filterStatus!=="all"&&p.status!==filterStatus) return false;
