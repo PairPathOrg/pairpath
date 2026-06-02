@@ -1140,6 +1140,7 @@ export default function App() {
   const [computedChains,setComputedChains]=useState([]);
   const [swapStatuses,setSwapStatuses]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_swap_statuses")||"{}");}catch{return {};}});
   const [swapFilter,setSwapFilter]=useState("");
+  const [swapResetConfirm,setSwapResetConfirm]=useState(null); // swapId whose reset confirmation is open
   const fileRef=useRef();
   const pendingFile=useRef(null);
 
@@ -2667,8 +2668,18 @@ export default function App() {
                       <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em"}}>COMBINED SCORE</span>
                       <span style={{fontFamily:"'DM Mono', monospace",fontSize:24,fontWeight:700,color:cs.text,background:`${cs.bg}55`,borderRadius:6,padding:"2px 12px"}}>{swap.combined}</span>
                       {status&&<span style={S.tag(SWAP_STATUS_COLORS[status])}>{statusLabel(status).toUpperCase()}</span>}
-                      {status&&<button onClick={()=>resetSwapStatus(swap.id)} title="Reset status"
-                        style={{background:"none",border:"none",color:"#6a8092",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}}>✕</button>}
+                      {status&&(swapResetConfirm===swap.id?(
+                        <span style={{display:"inline-flex",alignItems:"center",gap:8,background:"#1a2535",border:"1px solid #2a3d52",borderRadius:6,padding:"4px 10px"}}>
+                          <span style={{fontSize:13,color:"#b0bec5"}}>Remove {statusLabel(status)} status?</span>
+                          <button onClick={()=>{resetSwapStatus(swap.id);setSwapResetConfirm(null);}}
+                            style={{...S.btn,padding:"3px 10px",fontSize:13,background:"#3a1010",color:"#ff8a8a"}}>Yes, remove</button>
+                          <button onClick={()=>setSwapResetConfirm(null)}
+                            style={{...S.btn,padding:"3px 10px",fontSize:13,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Cancel</button>
+                        </span>
+                      ):(
+                        <button onClick={()=>setSwapResetConfirm(swap.id)} title="Reset status"
+                          style={{background:"none",border:"none",color:"#6a8092",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}}>✕</button>
+                      ))}
                       <button onClick={()=>cycleSwapStatus(swap.id)}
                         style={{...S.btn,marginLeft:"auto",padding:"7px 16px",background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18",fontSize:13}}>{btnLabel}</button>
                     </div>
