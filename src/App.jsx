@@ -2768,8 +2768,8 @@ export default function App() {
                       <button onClick={()=>cycleSwapStatus(swap.id)}
                         style={{...S.btn,marginLeft:"auto",padding:"7px 16px",background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18",fontSize:13}}>{btnLabel}</button>
                     </div>
-                    {/* 3-column body */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10,alignItems:"center"}}>
+                    {/* 3-column body — top-aligned so panels hug their content (no floating dead space) */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10,alignItems:"start"}}>
                       {/* Pair A — donor green, recipient blue */}
                       <div style={{padding:"6px 10px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
                         <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:2}}>PAIR A</div>
@@ -2778,15 +2778,16 @@ export default function App() {
                         <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Recip {A.recipient_name||A.id} <span style={{opacity:0.75}}>· {A.recipient_blood_type}</span></div>
                         {recipMeta(A)}
                       </div>
-                      {/* Center — legs */}
-                      <div style={{textAlign:"center",minWidth:120}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.06em"}}>LEG 1</div>
-                        <div style={{color:"#4db882",fontSize:20,letterSpacing:"0.12em"}}>→ →</div>
-                        <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l1.text,background:`${l1.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg1Score}</span>
-                        <div style={{height:8}}/>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.06em"}}>LEG 2</div>
-                        <div style={{color:"#4db882",fontSize:20,letterSpacing:"0.12em"}}>← ←</div>
-                        <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l2.text,background:`${l2.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg2Score}</span>
+                      {/* Center — legs (compact: arrow folded into the label so height matches the panels) */}
+                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:96,textAlign:"center"}}>
+                        <div>
+                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:12,color:"#b0bec8",letterSpacing:"0.05em",marginBottom:2}}>LEG 1 → →</div>
+                          <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l1.text,background:`${l1.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg1Score}</span>
+                        </div>
+                        <div>
+                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:12,color:"#b0bec8",letterSpacing:"0.05em",marginBottom:2}}>← ← LEG 2</div>
+                          <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l2.text,background:`${l2.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg2Score}</span>
+                        </div>
                       </div>
                       {/* Pair B — donor green, recipient blue */}
                       <div style={{padding:"6px 10px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
