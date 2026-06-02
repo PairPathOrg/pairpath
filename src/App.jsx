@@ -323,10 +323,15 @@ function exportSwaps(swaps, swapStatuses={}) {
 }
 
 // ── Pair Score display helpers ─────────────────────────────────────────────
+// Colors only. The five categories below are visually distinct; thresholds
+// mirror the grid legend (75 / 55 / 35). No scoring logic or ceilings change here.
 function scoreStyle(score, aboOnly) {
-  if (score >= 70) return { bg: "#0d7a52", text: "#7fffd4", label: aboOnly ? "ABO Compatible" : "Compatible" };
-  if (score >= 40) return { bg: "#7a5500", text: "#ffd166", label: aboOnly ? "ABO Marginal" : "Marginal" };
-  return { bg: "#7a1010", text: "#ff9999", label: "Incompatible" };
+  if (aboOnly)     return { bg: "#0d2040", text: "#6ab4d0", label: "ABO Compatible" }; // ABO ok, no HLA — blue
+  if (score >= 75) return { bg: "#0a4a32", text: "#4db882", label: "Strong" };         // green
+  if (score >= 55) return { bg: "#3d3000", text: "#ffd166", label: "Good" };           // gold
+  if (score >= 35) return { bg: "#2a2000", text: "#c8a84b", label: "Marginal" };       // amber
+  if (score > 0)   return { bg: "#3a0808", text: "#ff6b6b", label: "Poor" };           // red
+  return { bg: "#3a0808", text: "#ff6b6b", label: "Incompatible" };                    // ABO ✗ — red
 }
 
 const PAIR_TYPES = [
