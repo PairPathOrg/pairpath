@@ -319,36 +319,137 @@ function findSwaps(pairs) {
   return swaps.sort((x, y) => y.combined - x.combined);
 }
 
-function exportSwaps(swaps, swapStatuses={}) {
-  // Leg 1 = Pair A donor → Pair B recipient; Leg 2 = Pair B donor → Pair A recipient.
-  // No leg prefix here — the CSV column header already names the leg.
-  const flagStr = (donor, recipient, result) => swapLegFlags(donor, recipient, result).join("; ") || "None";
-  const csvCell = v => { const s=String(v??""); return s.includes(",")?`"${s}"`:s; };
-  const header = "Combined Score,Status,Pair A Donor,Pair A Donor Blood Type,Pair A Recipient,Pair A Recipient Blood Type,Leg 1 Score,Leg 1 Flags,Pair B Donor,Pair B Donor Blood Type,Pair B Recipient,Pair B Recipient Blood Type,Leg 2 Score,Leg 2 Flags";
-  const lines = swaps.map(w => [
-    w.combined,
-    swapStatuses[w.id] || "none",
-    w.pairA.donor_name || w.pairA.id,
-    w.pairA.donor_blood_type,
-    w.pairA.recipient_name || w.pairA.id,
-    w.pairA.recipient_blood_type,
-    w.leg1Score,
-    flagStr(w.pairA, w.pairB, w.leg1),
-    w.pairB.donor_name || w.pairB.id,
-    w.pairB.donor_blood_type,
-    w.pairB.recipient_name || w.pairB.id,
-    w.pairB.recipient_blood_type,
-    w.leg2Score,
-    flagStr(w.pairB, w.pairA, w.leg2),
-  ].map(csvCell).join(","));
-  const disclaimer = [
-    `PairPath Swap Analysis Export — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
-    `Combined Score = average of both leg Pair Scores (0-100). Each leg requires ABO compatibility. HLA mismatches drive 60% of each leg score (0MM=best). High PRA recipients score higher when matched — hardest to find, greatest clinical value. Size >20kg gap and CMV D+/R- flagged.`,
+// ── Export helpers (shared across matches / swaps / chains) ──────────────────
+// Standard scoring-explanation header rows used by every export; title varies.
+function exportDisclaimer(title){
+  return [
+    `${title} — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
+    `Pair Score (0-100): ABO compatibility required. HLA mismatches drive 60% of score (0MM=best). High PRA recipients score higher when matched — hardest to find, greatest clinical value. Size >20kg gap flagged.`,
     `Flags columns: clinical risk factors worth discussing before crossmatch. All scores are computational screens — not clinically validated. All matches require crossmatch confirmation.`,
     ``,
   ].map(r=>`"${r}"`).join("\n");
-  const blob = new Blob([[disclaimer,header,...lines].join("\n")],{type:"text/csv"});
-  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_swaps.csv"; a.click();
+}
+// CSV cell — quote when the value contains a comma, quote, or newline; escape inner quotes.
+const csvCell = v => { const s=String(v??""); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
+// Integer kg from a possibly-messy weight; "" when not a sane weight.
+const exportWeight = v => { const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,""))); return (!isNaN(n)&&n>0&&n<400)?n:""; };
+// Combined notes across entries: HLA notes first, then general notes; deduped.
+function combinedNotes(...entries){
+  const hla=[], gen=[];
+  entries.forEach(e=>{
+    if(!e) return;
+    if(e.donor_hla_notes&&!hla.includes(e.donor_hla_notes)) hla.push(e.donor_hla_notes);
+    if(e.recipient_hla_notes&&!hla.includes(e.recipient_hla_notes)) hla.push(e.recipient_hla_notes);
+    if(e.notes&&!gen.includes(e.notes)) gen.push(e.notes);
+  });
+  return [...hla,...gen].join(" | ");
+}
+
+function exportSwaps(swaps, swapStatuses={}, level="standard") {
+  // Each person: ID column, then an adjacent empty Name column (for VLOOKUP re-identification), then clinical columns.
+  const donorBlock = p => level==="quick"
+    ? [p.donor_name||p.id, "", p.donor_blood_type]
+    : level==="full"
+      ? [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)||"", exportWeight(p.donor_weight_kg), p.donor_height_cm||"", p.donor_egfr||""]
+      : [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)||""];
+  const recipBlock = p => level==="quick"
+    ? [p.recipient_name||p.id, "", p.recipient_blood_type]
+    : level==="full"
+      ? [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)||"", exportWeight(p.recipient_weight_kg), p.recipient_height_cm||"", p.recipient_pra_percent??""]
+      : [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)||"", p.recipient_pra_percent??""];
+  const donorHdr = n => level==="quick"
+    ? [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`]
+    : level==="full"
+      ? [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`,`Pair ${n} Donor eGFR`]
+      : [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`];
+  const recipHdr = n => level==="quick"
+    ? [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`]
+    : level==="full"
+      ? [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} Recipient Weight (kg)`,`Pair ${n} Recipient Height (cm)`,`Pair ${n} PRA%`]
+      : [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} PRA%`];
+  // Per-leg flags, CMV excluded (CMV is removed from all exports).
+  const swapFlags = w => [
+    ...swapLegFlags(w.pairA, w.pairB, w.leg1, "Leg 1"),
+    ...swapLegFlags(w.pairB, w.pairA, w.leg2, "Leg 2"),
+  ].filter(f=>!f.includes("CMV")).join("; ")||"None";
+
+  const headerCols = ["Combined Score", ...donorHdr(1), ...recipHdr(1), "Pair 1 Score", ...donorHdr(2), ...recipHdr(2), "Pair 2 Score"];
+  if(level==="full") headerCols.push("Flags","Notes");
+  headerCols.push("Status");
+
+  const sorted = [...swaps].sort((a,b)=>b.combined-a.combined);
+  const lines = sorted.map(w=>{
+    const row=[w.combined, ...donorBlock(w.pairA), ...recipBlock(w.pairA), w.leg1Score, ...donorBlock(w.pairB), ...recipBlock(w.pairB), w.leg2Score];
+    if(level==="full") row.push(swapFlags(w), combinedNotes(w.pairA, w.pairB));
+    row.push(swapStatuses[w.id]||"none");
+    return row.map(csvCell).join(",");
+  });
+  const header = headerCols.map(csvCell).join(",");
+  const blob = new Blob([[exportDisclaimer("PairPath Swap Analysis Export"),header,...lines].join("\n")],{type:"text/csv"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_swaps_${level}.csv`; a.click();
+}
+
+// Each chain is an array of steps {donorName,donorBlood,donorPairId,recipientName,recipientBlood,recipientPairId,score}.
+// allPairs is used to look up full entry data (age/weight/height/eGFR/PRA/notes) by pair id.
+function exportChains(chains, allPairs=[], level="standard") {
+  const byId = new Map(allPairs.map(p=>[p.id,p]));
+  const MAX_STEPS = 6;
+
+  const rows = chains.map(chain=>{
+    const chainScore = chain.length ? Math.round(chain.reduce((s,c)=>s+(c.score||0),0)/chain.length) : 0;
+    const steps = chain.map(step=>{
+      const d = byId.get(step.donorPairId)||{}, r = byId.get(step.recipientPairId)||{};
+      return {
+        donor: step.donorName||d.donor_name||step.donorPairId,
+        donorBlood: step.donorBlood||d.donor_blood_type||"",
+        donorAge: calcAge(d.donor_year_born)||"",
+        donorWeight: exportWeight(d.donor_weight_kg),
+        donorHeight: d.donor_height_cm||"",
+        donorEgfr: d.donor_egfr||"",
+        recipient: step.recipientName||r.recipient_name||step.recipientPairId,
+        recipientBlood: step.recipientBlood||r.recipient_blood_type||"",
+        recipientAge: calcAge(r.recipient_year_born)||"",
+        recipientWeight: exportWeight(r.recipient_weight_kg),
+        recipientHeight: r.recipient_height_cm||"",
+        pra: r.recipient_pra_percent??"",
+        d, r,
+      };
+    });
+    const flagParts=[];
+    steps.forEach((st,si)=>{
+      if(st.donorWeight&&st.recipientWeight&&Math.abs(st.donorWeight-st.recipientWeight)>20) flagParts.push(`Step ${si+1}: Size gap`);
+      if(parseFloat(st.pra||0)>80) flagParts.push(`Step ${si+1}: High PRA ${st.pra}%`);
+    });
+    const flags = flagParts.join("; ")||"None";
+    const notes = combinedNotes(...steps.flatMap(st=>[st.d,st.r]));
+    return {chainScore, length:chain.length, steps, flags, notes};
+  });
+  rows.sort((a,b)=>b.chainScore-a.chainScore);
+
+  const stepHdr = n => level==="quick"
+    ? [`Step ${n} Donor`,`Step ${n} Donor Blood Type`,`Step ${n} Recipient`,`Step ${n} Recipient Blood Type`]
+    : level==="full"
+      ? [`Step ${n} Donor`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Donor Weight (kg)`,`Step ${n} Donor Height (cm)`,`Step ${n} Donor eGFR`,`Step ${n} Recipient`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} Recipient Weight (kg)`,`Step ${n} Recipient Height (cm)`,`Step ${n} PRA%`]
+      : [`Step ${n} Donor`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Recipient`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} PRA%`];
+  const stepCells = st => {
+    if(level==="quick") return st?[st.donor,st.donorBlood,st.recipient,st.recipientBlood]:["","","",""];
+    if(level==="full")  return st?[st.donor,st.donorBlood,st.donorAge,st.donorWeight,st.donorHeight,st.donorEgfr,st.recipient,st.recipientBlood,st.recipientAge,st.recipientWeight,st.recipientHeight,st.pra]:Array(12).fill("");
+    return st?[st.donor,st.donorBlood,st.donorAge,st.recipient,st.recipientBlood,st.recipientAge,st.pra]:Array(7).fill("");
+  };
+
+  const headerCols = ["Chain Score","Chain Length"];
+  for(let n=1;n<=MAX_STEPS;n++) headerCols.push(...stepHdr(n));
+  if(level==="full") headerCols.push("Flags","Notes");
+
+  const lines = rows.map(row=>{
+    const cells=[row.chainScore,row.length];
+    for(let n=0;n<MAX_STEPS;n++) cells.push(...stepCells(row.steps[n]));
+    if(level==="full") cells.push(row.flags,row.notes);
+    return cells.map(csvCell).join(",");
+  });
+  const header = headerCols.map(csvCell).join(",");
+  const blob = new Blob([[exportDisclaimer("PairPath Chain Export"),header,...lines].join("\n")],{type:"text/csv"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_chains_${level}.csv`; a.click();
 }
 
 // ── Pair Score display helpers ─────────────────────────────────────────────
@@ -609,10 +710,10 @@ function exportMatches(pairs, level="standard") {
       const waitlist = recipient.recipient_dialysis_start
         ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
 
-      // CMV confidence flag
-      const cmvFlag = donor.donor_cmv==="Positive"&&recipient.recipient_cmv==="Negative"?"⚠ CMV D+/R-":"";
-      const sizeFlag = donorWt&&recipWt&&Math.abs(donorWt-recipWt)>20?"⚠ Size gap":"";
-      const flags=[cmvFlag,sizeFlag].filter(Boolean).join("; ")||"None";
+      // Flags — CMV excluded from all exports; size gap + high PRA only.
+      const sizeFlag = donorWt&&recipWt&&Math.abs(donorWt-recipWt)>20?"Size gap":"";
+      const praFlag  = parseFloat(recipient.recipient_pra_percent||0)>80?"High PRA":"";
+      const flags=[sizeFlag,praFlag].filter(Boolean).join("; ")||"None";
 
       rows.push({
         pair_score:       result.score ?? "ABO only",
@@ -633,33 +734,26 @@ function exportMatches(pairs, level="standard") {
         weight_gap_kg:    donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
         flags,
         donor_egfr:       donor.donor_egfr||"",
-        donor_cmv:        donor.donor_cmv||"",
-        recipient_cmv:    recipient.recipient_cmv||"",
-        hla_notes:        recipient.recipient_hla_notes||donor.donor_hla_notes||"",
+        notes:            combinedNotes(donor, recipient),
       });
     });
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
 
-  // Donor information always comes before recipient information (left to right).
+  // Donor before recipient (left to right). Each person: ID, then an adjacent empty
+  // Name column (for VLOOKUP re-identification), then clinical columns.
   let header, lines;
   if(level==="quick"){
-    header = "Pair Score,Donor,Donor Blood Type,Recipient,Recipient Blood Type,Recipient PRA%";
-    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.recipient,r.recipient_blood,r.pra].join(","));
+    header = "Pair Score,Donor,Donor Name,Donor Blood Type,Recipient,Recipient Name,Recipient Blood Type,Recipient PRA%";
+    lines  = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.recipient,"",r.recipient_blood,r.pra].map(csvCell).join(","));
   } else if(level==="full"){
-    header = "Pair Score,Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Donor CMV,Recipient,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Recipient CMV,Weight Gap (kg),Flags,HLA Notes";
-    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.donor_cmv,r.recipient,r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.recipient_cmv,r.weight_gap_kg,r.flags,r.hla_notes].join(","));
+    header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
+    lines  = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
   } else {
-    header = "Pair Score,Donor,Donor Blood Type,Donor Age,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA%,Waitlist Date,Weight Gap (kg),Flags";
-    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.weight_gap_kg,r.flags].join(","));
+    header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient PRA%,Waitlist Date,Waitlist Duration";
+    lines  = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.recipient,"",r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.waitlist_duration].map(csvCell).join(","));
   }
-  const disclaimer = [
-    `PairPath Match Export — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
-    `Pair Score (0-100): ABO compatibility required. HLA mismatches drive 60% of score (0MM=best). High PRA recipients score higher when matched — hardest to find, greatest clinical value. Size >20kg gap and CMV D+/R- flagged. Waitlist rank = position among recipients with known waitlist dates in this registry.`,
-    `Flags column: clinical risk factors worth discussing before crossmatch. All scores are computational screens — not clinically validated. All matches require crossmatch confirmation.`,
-    ``,
-  ].map(r=>`"${r}"`).join("\n");
-  const blob = new Blob([[disclaimer,header,...lines].join("\n")],{type:"text/csv"});
+  const blob = new Blob([[exportDisclaimer("PairPath Match Export"),header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_matches_${level}.csv`; a.click();
 }
 
@@ -1160,7 +1254,7 @@ export default function App() {
   const [xlsxSheets,setXlsxSheets]=useState([]);
   const [xlsxResults,setXlsxResults]=useState([]);
   const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
-  const [showMatchExport,setShowMatchExport]=useState(false);
+  const [exportModalKind,setExportModalKind]=useState(null); // null | "matches" | "swaps" | "chains"
   const [nameWarning,setNameWarning]=useState(null);
   const [whatIfDonor,setWhatIfDonor]=useState(null);
   const [importHeightUnit,setImportHeightUnit]=useState("meters");
@@ -2134,27 +2228,33 @@ export default function App() {
       )}
 
       {/* Export Matches Detail Level Modal */}
-      {showMatchExport&&(
+      {exportModalKind&&(()=>{
+        const cfg={
+          matches:{title:"Export Matches",run:l=>exportMatches(visiblePairs,l)},
+          swaps:{title:"Export Swaps",run:l=>exportSwaps(filteredSwaps,swapStatuses,l)},
+          chains:{title:"Export Chains",run:l=>exportChains(chains,demoMode?DEMO_PAIRS:pairs,l)},
+        }[exportModalKind];
+        return (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
           <div style={{...S.card,maxWidth:480,width:"90%"}}>
-            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>Export Matches</div>
-            <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by Pair Score.</p>
+            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>{cfg.title}</div>
+            <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by score (highest first).</p>
             {[
-              {level:"quick",label:"Quick View",desc:"Score · Names · Blood Types · PRA%","cols":"6 columns — for a fast first look in a meeting"},
-              {level:"standard",label:"Standard",desc:"+ Age · Waitlist Date · Weights · Weight Gap","cols":"12 columns — recommended for most presentations"},
-              {level:"full",label:"Full Clinical",desc:"+ eGFR · CMV (donor & recipient) · HLA Notes","cols":"17 columns — for detailed clinical review"},
-            ].map(({level,label,desc,cols})=>(
-              <button key={level} onClick={()=>{exportMatches(visiblePairs,level);setShowMatchExport(false);}}
+              {level:"quick",label:"Quick View",desc:"Score · IDs · Blood Types · PRA%"},
+              {level:"standard",label:"Standard",desc:"+ Ages · Waitlist · PRA%"},
+              {level:"full",label:"Full Clinical",desc:"+ Weight · Height · eGFR · Flags · Notes"},
+            ].map(({level,label,desc})=>(
+              <button key={level} onClick={()=>{cfg.run(level);setExportModalKind(null);}}
                 style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
                 <div style={{fontSize:14,fontWeight:600,color:"#ffffff",marginBottom:3}}>{label}</div>
-                <div style={{fontSize:13,color:"#6ab4d0",marginBottom:3}}>{desc}</div>
-                <div style={{fontSize:13,color:"#b0bec8",fontFamily:"'DM Mono', monospace"}}>{cols}</div>
+                <div style={{fontSize:13,color:"#6ab4d0"}}>{desc}</div>
               </button>
             ))}
-            <button onClick={()=>setShowMatchExport(false)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",width:"100%",marginTop:4}}>Cancel</button>
+            <button onClick={()=>setExportModalKind(null)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",width:"100%",marginTop:4}}>Cancel</button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Duplicate Warning Modal */}
       {duplicateWarning&&(
@@ -2419,7 +2519,7 @@ export default function App() {
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
               </label>
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Export CSV</button>
-              <button onClick={()=>setShowMatchExport(true)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
+              <button onClick={()=>setExportModalKind("matches")} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
           
 
@@ -2615,8 +2715,14 @@ export default function App() {
       {/* Chains */}
       {view==="chains"&&(
         <div style={S.page}>
-          <h1 style={S.pageTitle}>Chain Identification</h1>
-          <p style={S.subtitle}>Compatible exchange chains across all active pairs. Chains longer than 6-way are rare in practice and logistically complex to coordinate.</p>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+            <div>
+              <h1 style={S.pageTitle}>Chain Identification</h1>
+              <p style={S.subtitle}>Compatible exchange chains across all active pairs. Chains longer than 6-way are rare in practice and logistically complex to coordinate.</p>
+            </div>
+            <button onClick={()=>setExportModalKind("chains")} disabled={!chains.length}
+              style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:chains.length?1:0.5,cursor:chains.length?"pointer":"not-allowed"}}>Export CSV</button>
+          </div>
           {chainsLoading?(
             <div style={{textAlign:"center",padding:60,color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
           ):chains.length===0?(
@@ -2697,7 +2803,7 @@ export default function App() {
                 <option value="scheduled">Scheduled</option>
                 <option value="completed">Completed</option>
               </select>
-              <button onClick={()=>exportSwaps(filteredSwaps,swapStatuses)} disabled={!swaps.length}
+              <button onClick={()=>setExportModalKind("swaps")} disabled={!swaps.length}
                 style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:swaps.length?1:0.5,cursor:swaps.length?"pointer":"not-allowed"}}>Export CSV</button>
             </div>
           </div>
