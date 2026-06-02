@@ -2296,11 +2296,12 @@ export default function App() {
                         </div>
                       </td>
                       {activePairs.filter(p=>p.donor_blood_type).filter(p=>filterDonorBlood==="all"||p.donor_blood_type===filterDonorBlood).map(donor=>{
-                        if(donor.id===recipient.id) return <td key={donor.id} style={{textAlign:"center",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:"#131c26",color:"#2a3a4a"}}>—</td>;
+                        // Every cell is scored the same way — including a pair's own donor vs its own
+                        // recipient. That pair is incompatible (the reason they're in the registry), so
+                        // it simply renders red 0 / ABO like any other incompatible cell. No special case.
                         const result=calculateCompatibility(donor,recipient);
-                        // Off the diagonal a cell is NEVER blank. A null/undefined/blank score OR
-                        // any non-ABO-compatible result renders as a SOLID red incompatible cell
-                        // showing 0 and "ABO". Only the self-match (same id) shows a dash, above.
+                        // A null/undefined/blank score OR any non-ABO-compatible result renders as a
+                        // SOLID red incompatible cell showing 0 and "ABO" — a cell is never blank.
                         const rawScore=result?.score;
                         const aboCompatible=!!result?.reasons?.abo;
                         const isIncompatible=!aboCompatible||rawScore===null||rawScore===undefined||rawScore==="";
