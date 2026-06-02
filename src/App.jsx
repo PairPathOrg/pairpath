@@ -242,6 +242,86 @@ function findChains(pairs) {
   ).slice(0, MAX_RESULTS);
 }
 
+// ── Swap Engine ────────────────────────────────────────────────────────────
+// A swap is a 2-way exchange between two incompatible pairs:
+//   Leg 1: Pair A's donor → Pair B's recipient
+//   Leg 2: Pair B's donor → Pair A's recipient
+// Both legs must be ABO compatible. Only paired entries (donor + recipient in
+// the same entry) participate. Combined score = average of the two leg scores.
+const SWAP_STATUS_CYCLE = ["proposed","accepted","scheduled","completed"];
+const SWAP_STATUS_COLORS = { proposed:"#6ab4d0", accepted:"#4db882", scheduled:"#ffd166", completed:"#90a4b4" };
+
+// Confidence flags for a single leg, derived from a calculateCompatibility result.
+function swapLegFlags(result){
+  const r = result?.reasons || {};
+  const flags = [];
+  if(r.cmvRisk) flags.push("CMV D+/R-");
+  if(r.sizeMatch===false) flags.push("Size gap");
+  if(r.highSensitization) flags.push("High PRA");
+  return flags;
+}
+
+function findSwaps(pairs) {
+  // Eligible = active entries that are a true pair (have BOTH a donor and a recipient).
+  const eligible = pairs.filter(p =>
+    p.status === "active" &&
+    (p.pair_type === "paired" || (p.donor_blood_type && p.recipient_blood_type)) &&
+    p.donor_blood_type && p.recipient_blood_type
+  );
+
+  const swaps = [];
+  for (let i = 0; i < eligible.length; i++) {
+    for (let j = i + 1; j < eligible.length; j++) {
+      const a = eligible[i], b = eligible[j];
+      // Both legs must be ABO compatible to be a valid swap.
+      if (!checkABO(a.donor_blood_type, b.recipient_blood_type)) continue; // Leg 1: A donor → B recip
+      if (!checkABO(b.donor_blood_type, a.recipient_blood_type)) continue; // Leg 2: B donor → A recip
+      const leg1 = calculateCompatibility(a, b); // A's donor vs B's recipient
+      const leg2 = calculateCompatibility(b, a); // B's donor vs A's recipient
+      const leg1Score = leg1.score ?? 0;
+      const leg2Score = leg2.score ?? 0;
+      swaps.push({
+        id: `${a.id}_${b.id}`,
+        pairA: a, pairB: b,
+        leg1, leg2, leg1Score, leg2Score,
+        combined: Math.round((leg1Score + leg2Score) / 2),
+      });
+    }
+  }
+  // Dedup is inherent (j starts at i+1, so A↔B is considered once). Sort by combined score.
+  return swaps.sort((x, y) => y.combined - x.combined);
+}
+
+function exportSwaps(swaps, swapStatuses={}) {
+  const flagStr = result => swapLegFlags(result).join("; ") || "None";
+  const csvCell = v => { const s=String(v??""); return s.includes(",")?`"${s}"`:s; };
+  const header = "Combined Score,Status,Pair A Donor,Pair A Donor Blood Type,Pair A Recipient,Pair A Recipient Blood Type,Leg 1 Score,Leg 1 Flags,Pair B Donor,Pair B Donor Blood Type,Pair B Recipient,Pair B Recipient Blood Type,Leg 2 Score,Leg 2 Flags";
+  const lines = swaps.map(w => [
+    w.combined,
+    swapStatuses[w.id] || "none",
+    w.pairA.donor_name || w.pairA.id,
+    w.pairA.donor_blood_type,
+    w.pairA.recipient_name || w.pairA.id,
+    w.pairA.recipient_blood_type,
+    w.leg1Score,
+    flagStr(w.leg1),
+    w.pairB.donor_name || w.pairB.id,
+    w.pairB.donor_blood_type,
+    w.pairB.recipient_name || w.pairB.id,
+    w.pairB.recipient_blood_type,
+    w.leg2Score,
+    flagStr(w.leg2),
+  ].map(csvCell).join(","));
+  const disclaimer = [
+    `PairPath Swap Analysis Export — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
+    `Combined Score = average of both leg Pair Scores (0-100). Each leg requires ABO compatibility. HLA mismatches drive 60% of each leg score (0MM=best). High PRA recipients score higher when matched — hardest to find, greatest clinical value. Size >20kg gap and CMV D+/R- flagged.`,
+    `Flags columns: clinical risk factors worth discussing before crossmatch. All scores are computational screens — not clinically validated. All matches require crossmatch confirmation.`,
+    ``,
+  ].map(r=>`"${r}"`).join("\n");
+  const blob = new Blob([[disclaimer,header,...lines].join("\n")],{type:"text/csv"});
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_swaps.csv"; a.click();
+}
+
 // ── Pair Score display helpers ─────────────────────────────────────────────
 function scoreStyle(score, aboOnly) {
   if (score >= 70) return { bg: "#0d7a52", text: "#7fffd4", label: aboOnly ? "ABO Compatible" : "Compatible" };
@@ -999,6 +1079,11 @@ const DEMO_PAIRS = [
   {id:"d6",pair_type:"recipient_only",status:"active",recipient_name:"R5",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
   {id:"d7",pair_type:"paired",status:"active",recipient_name:"R6",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"D6",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
   {id:"d8",pair_type:"paired",status:"matched",recipient_name:"R7",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"D7",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
+  // Paired entries tuned to form clean 2-way swaps in demo mode (D/R IDs only — anonymized).
+  {id:"d9",pair_type:"paired",status:"active",recipient_name:"R8",recipient_blood_type:"A",recipient_pra_percent:62,recipient_weight_kg:55,recipient_year_born:"1976",recipient_cmv:"Negative",donor_name:"D8",donor_blood_type:"B",donor_weight_kg:78,donor_year_born:"1974",donor_egfr:84,donor_cmv:"Positive",centre:"Stanford Health",created_at:new Date(Date.now()-86400000*22).toISOString(),user_id:"demo"},
+  {id:"d10",pair_type:"paired",status:"active",recipient_name:"R9",recipient_blood_type:"B",recipient_pra_percent:18,recipient_weight_kg:71,recipient_year_born:"1982",recipient_cmv:"Positive",donor_name:"D9",donor_blood_type:"A",donor_weight_kg:74,donor_year_born:"1980",donor_egfr:90,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*24).toISOString(),user_id:"demo"},
+  {id:"d11",pair_type:"paired",status:"active",recipient_name:"R10",recipient_blood_type:"O",recipient_pra_percent:88,recipient_weight_kg:60,recipient_year_born:"1969",recipient_cmv:"Negative",donor_name:"D10",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1971",donor_egfr:79,donor_cmv:"Positive",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*26).toISOString(),user_id:"demo"},
+  {id:"d12",pair_type:"paired",status:"active",recipient_name:"R11",recipient_blood_type:"A",recipient_pra_percent:40,recipient_weight_kg:95,recipient_year_born:"1987",recipient_cmv:"Negative",donor_name:"D11",donor_blood_type:"O",donor_weight_kg:70,donor_year_born:"1985",donor_egfr:93,donor_cmv:"Negative",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*28).toISOString(),user_id:"demo"},
 ];
 
 // ── Main App ───────────────────────────────────────────────────────────────
@@ -1048,6 +1133,8 @@ export default function App() {
   const [showAudit,setShowAudit]=useState(false);
   const [chainsLoading,setChainsLoading]=useState(false);
   const [computedChains,setComputedChains]=useState([]);
+  const [swapStatuses,setSwapStatuses]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_swap_statuses")||"{}");}catch{return {};}});
+  const [swapFilter,setSwapFilter]=useState("");
   const fileRef=useRef();
   const pendingFile=useRef(null);
 
@@ -1117,6 +1204,20 @@ export default function App() {
     return()=>clearTimeout(timeout);
   },[view,pairs,demoMode]);
 
+  // Persist swap statuses across sessions.
+  useEffect(()=>{try{localStorage.setItem("pairpath_swap_statuses",JSON.stringify(swapStatuses));}catch{}},[swapStatuses]);
+
+  // Advance a swap through its lifecycle: none → proposed → accepted → scheduled → completed → none.
+  function cycleSwapStatus(swapId){
+    setSwapStatuses(prev=>{
+      const idx=SWAP_STATUS_CYCLE.indexOf(prev[swapId]);
+      const next=idx<0?SWAP_STATUS_CYCLE[0]:(idx>=SWAP_STATUS_CYCLE.length-1?null:SWAP_STATUS_CYCLE[idx+1]);
+      const updated={...prev};
+      if(next===null) delete updated[swapId]; else updated[swapId]=next;
+      return updated;
+    });
+  }
+
   if(authLoading) return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
   if(!session&&!demoMode) return <AuthScreen onDemoMode={()=>setDemoMode(true)}/>;
 
@@ -1184,6 +1285,16 @@ export default function App() {
   });
 
   const chains=computedChains;
+  // Swaps recompute inline (O(n²)) — consistent with stats/filteredPairs below.
+  const swaps=findSwaps(visiblePairs);
+  const filteredSwaps=swapFilter?swaps.filter(w=>swapStatuses[w.id]===swapFilter):swaps;
+  const eligibleSwapPairs=visiblePairs.filter(p=>p.status==="active"&&(p.pair_type==="paired"||(p.donor_blood_type&&p.recipient_blood_type))&&p.donor_blood_type&&p.recipient_blood_type).length;
+  const swapStats={
+    total:swaps.length,
+    avg:swaps.length?Math.round(swaps.reduce((s,w)=>s+w.combined,0)/swaps.length):0,
+    proposed:swaps.filter(w=>swapStatuses[w.id]==="proposed").length,
+    accepted:swaps.filter(w=>swapStatuses[w.id]==="accepted").length,
+  };
   const stats={
     total:visiblePairs.length,active:activePairs.length,
     completed:visiblePairs.filter(p=>p.status==="completed").length,
@@ -2062,7 +2173,7 @@ export default function App() {
           {demoMode&&<span style={{fontSize:13,color:"#ffd166",fontFamily:"'DM Mono', monospace"}}>demo data — not saved</span>}
         </div>
         <nav style={{display:"flex",gap:2}}>
-          {[["grid","Grid"],["registry","Registry"],["matches","Matches"],["chains","Chains"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l])=>(
+          {[["grid","Grid"],["registry","Registry"],["matches","Matches"],["chains","Chains"],["swaps","Swaps"],["dashboard","Dashboard"],["add","+ Add"]].map(([v,l])=>(
             <button key={v} onClick={()=>{setView(v);setEditingPair(null);if(v==="add")setForm(emptyForm);}} style={S.navBtn(view===v)}>{l}</button>
           ))}
         </nav>
@@ -2473,6 +2584,120 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Swaps */}
+      {view==="swaps"&&(
+        <div style={S.page}>
+          <h1 style={S.pageTitle}>Swap Analysis</h1>
+          <p style={S.subtitle}>2-way paired exchanges — both donors cross-donate to each other's recipient.</p>
+
+          {/* Stats + controls */}
+          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",marginBottom:20}}>
+            <div style={{display:"flex",gap:28,flexWrap:"wrap"}}>
+              {[
+                ["VIABLE SWAPS",swapStats.total,"#4db882"],
+                ["AVG COMBINED",swapStats.avg,"#6ab4d0"],
+                ["PROPOSED",swapStats.proposed,"#6ab4d0"],
+                ["ACCEPTED",swapStats.accepted,"#4db882"],
+              ].map(([l,v,c])=>(
+                <div key={l}>
+                  <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em"}}>{l}</div>
+                  <div style={{fontSize:22,fontWeight:700,color:c}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+              <select value={swapFilter} onChange={e=>setSwapFilter(e.target.value)} style={{...S.select,width:170}}>
+                <option value="">All Swaps</option>
+                <option value="proposed">Proposed</option>
+                <option value="accepted">Accepted</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+              </select>
+              <button onClick={()=>exportSwaps(filteredSwaps,swapStatuses)} disabled={!swaps.length}
+                style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:swaps.length?1:0.5,cursor:swaps.length?"pointer":"not-allowed"}}>Export CSV</button>
+            </div>
+          </div>
+
+          {swaps.length===0?(
+            <div style={{...S.card,textAlign:"center",padding:48,color:"#b0bec8"}}>
+              <div style={{fontSize:15,color:"#ffffff",marginBottom:10}}>No viable swaps found</div>
+              <div style={{fontSize:13,lineHeight:1.7,maxWidth:540,margin:"0 auto"}}>
+                A swap requires <strong>paired entries</strong> — a single entry that has <em>both</em> a donor and a recipient — whose blood types are mutually compatible (Pair A's donor matches Pair B's recipient, and Pair B's donor matches Pair A's recipient).
+                <div style={{marginTop:12,fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6ab4d0"}}>
+                  {eligibleSwapPairs} eligible paired {eligibleSwapPairs===1?"entry":"entries"} · at least 2 with compatible blood types are needed
+                </div>
+              </div>
+            </div>
+          ):filteredSwaps.length===0?(
+            <div style={{...S.card,textAlign:"center",padding:40,color:"#b0bec8",fontSize:13}}>No swaps with status “{statusLabel(swapFilter)}”.</div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {filteredSwaps.map(swap=>{
+                const cs=scoreStyle(swap.combined,false);
+                const l1=scoreStyle(swap.leg1Score,swap.leg1.aboOnly);
+                const l2=scoreStyle(swap.leg2Score,swap.leg2.aboOnly);
+                const status=swapStatuses[swap.id];
+                const idx=SWAP_STATUS_CYCLE.indexOf(status);
+                const nextStatus=idx<0?"proposed":(idx>=SWAP_STATUS_CYCLE.length-1?null:SWAP_STATUS_CYCLE[idx+1]);
+                const btnLabel=!status?"Propose":(nextStatus?`Mark ${statusLabel(nextStatus)}`:"Reset");
+                const flags=[
+                  ...swapLegFlags(swap.leg1).map(f=>`Leg 1 · ${f}`),
+                  ...swapLegFlags(swap.leg2).map(f=>`Leg 2 · ${f}`),
+                ];
+                const A=swap.pairA, B=swap.pairB;
+                return (
+                  <div key={swap.id} style={{...S.card,background:"#131c26",border:`1px solid ${cs.bg}`}}>
+                    {/* Header row */}
+                    <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:14}}>
+                      <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em"}}>COMBINED SCORE</span>
+                      <span style={{fontFamily:"'DM Mono', monospace",fontSize:24,fontWeight:700,color:cs.text,background:`${cs.bg}55`,borderRadius:6,padding:"2px 12px"}}>{swap.combined}</span>
+                      {status&&<span style={S.tag(SWAP_STATUS_COLORS[status])}>{statusLabel(status).toUpperCase()}</span>}
+                      <button onClick={()=>cycleSwapStatus(swap.id)}
+                        style={{...S.btn,marginLeft:"auto",padding:"7px 16px",background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18",fontSize:13}}>{btnLabel}</button>
+                    </div>
+                    {/* 3-column body */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:12,alignItems:"center"}}>
+                      {/* Pair A */}
+                      <div style={{padding:"12px 14px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:6}}>PAIR A</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Donor {A.donor_name||A.id} <span style={{color:"#4db882"}}>· {A.donor_blood_type}</span></div>
+                        <div style={{textAlign:"center",color:"#4db882",fontSize:16,margin:"2px 0"}}>↓</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#6ad0a0"}}>Recip {A.recipient_name||A.id} <span style={{color:"#4db882"}}>· {A.recipient_blood_type}</span></div>
+                        <div style={{fontSize:13,color:"#b0bec8",marginTop:4}}>Age {calcAge(A.recipient_year_born)||"—"} · PRA {A.recipient_pra_percent??"?"}%{A.recipient_pra_percent>80&&<span style={{color:"#ff8a8a",marginLeft:4}}>HIGH</span>}</div>
+                      </div>
+                      {/* Center — legs */}
+                      <div style={{textAlign:"center",minWidth:120}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.06em"}}>LEG 1</div>
+                        <div style={{color:"#4db882",fontSize:20,letterSpacing:"0.12em"}}>→ →</div>
+                        <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l1.text,background:`${l1.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg1Score}</span>
+                        <div style={{height:12}}/>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.06em"}}>LEG 2</div>
+                        <div style={{color:"#4db882",fontSize:20,letterSpacing:"0.12em"}}>← ←</div>
+                        <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l2.text,background:`${l2.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg2Score}</span>
+                      </div>
+                      {/* Pair B */}
+                      <div style={{padding:"12px 14px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:6}}>PAIR B</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Donor {B.donor_name||B.id} <span style={{color:"#4db882"}}>· {B.donor_blood_type}</span></div>
+                        <div style={{textAlign:"center",color:"#4db882",fontSize:16,margin:"2px 0"}}>↓</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#6ad0a0"}}>Recip {B.recipient_name||B.id} <span style={{color:"#4db882"}}>· {B.recipient_blood_type}</span></div>
+                        <div style={{fontSize:13,color:"#b0bec8",marginTop:4}}>Age {calcAge(B.recipient_year_born)||"—"} · PRA {B.recipient_pra_percent??"?"}%{B.recipient_pra_percent>80&&<span style={{color:"#ff8a8a",marginLeft:4}}>HIGH</span>}</div>
+                      </div>
+                    </div>
+                    {/* Combined confidence flags for both legs */}
+                    {flags.length>0&&(
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+                        {flags.map((f,fi)=><span key={fi} style={S.tag(f.includes("CMV")?"#ffb86b":f.includes("Size")?"#ffd166":"#ff8a8a")}>⚠ {f}</span>)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
