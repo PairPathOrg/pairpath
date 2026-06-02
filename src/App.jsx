@@ -329,7 +329,7 @@ function exportSwaps(swaps, swapStatuses={}) {
 function scoreStyle(score, aboOnly) {
   if (score === null || score === undefined)
                    return { bg: "#0d2040", text: "#6ab4d0", label: "ABO Compatible" }; // no score data — blue
-  if (score >= 75) return { bg: "#0a4a32", text: "#4db882", label: "Strong" };         // green
+  if (score >= 68) return { bg: "#0a4a32", text: "#4db882", label: "Strong" };         // green (68+: strong ABO-only candidates without HLA data)
   if (score >= 55) return { bg: "#3d3000", text: "#ffd166", label: "Good" };           // gold
   if (score >= 35) return { bg: "#2a2000", text: "#c8a84b", label: "Marginal" };       // amber
   if (score > 0)   return { bg: "#3a0808", text: "#ff6b6b", label: "Poor" };           // red
@@ -2219,7 +2219,7 @@ export default function App() {
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
-              {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",0,false]].map(([l,r,sc,ao])=>(
+              {[["Strong","68+",85,false],["Good","55–67",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",0,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:13,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
                   <span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:scoreStyle(sc,ao).bg}}/>
                   {l} ({r})
@@ -2269,12 +2269,14 @@ export default function App() {
                       {activePairs.filter(p=>p.donor_blood_type).filter(p=>filterDonorBlood==="all"||p.donor_blood_type===filterDonorBlood).map(donor=>{
                         if(donor.id===recipient.id) return <td key={donor.id} style={{textAlign:"center",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:"#131c26",color:"#2a3a4a"}}>—</td>;
                         const result=calculateCompatibility(donor,recipient);
-                        // Off the diagonal a cell is NEVER blank: a null/undefined/blank result
-                        // renders as a red ABO-incompatible cell showing 0 and "ABO".
+                        // Off the diagonal a cell is NEVER blank. A null/undefined/blank score OR
+                        // any non-ABO-compatible result renders as a SOLID red incompatible cell
+                        // showing 0 and "ABO". Only the self-match (same id) shows a dash, above.
                         const rawScore=result?.score;
-                        const isBlank=rawScore===null||rawScore===undefined||rawScore==="";
-                        const scoreVal=isBlank?0:rawScore;
-                        const s=isBlank?scoreStyle(0,false):scoreStyle(scoreVal,result.aboOnly);
+                        const aboCompatible=!!result?.reasons?.abo;
+                        const isIncompatible=!aboCompatible||rawScore===null||rawScore===undefined||rawScore==="";
+                        const scoreVal=isIncompatible?0:rawScore;
+                        const s=isIncompatible?scoreStyle(0,false):scoreStyle(scoreVal,result.aboOnly);
                         const cellKey=`${donor.id}-${recipient.id}`;
                         return (
                           <td key={donor.id}
@@ -2282,9 +2284,9 @@ export default function App() {
                             onMouseLeave={()=>setHoveredCell(null)}
                             onClick={()=>openDetail(donor,recipient)}
                             title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+(result.reasons.hlaMismatches??0)} | ${s.label}`}
-                            style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
+                            style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:(hoveredCell===cellKey||isIncompatible)?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
                             <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{scoreVal}</div>
-                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{isBlank?"ABO":(result.aboOnly?"ABO":`${result.reasons.hlaMismatches??0}MM`)}</div>
+                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{isIncompatible?"ABO":(result.aboOnly?"ABO":`${result.reasons.hlaMismatches??0}MM`)}</div>
                           </td>
                         );
                       })}
