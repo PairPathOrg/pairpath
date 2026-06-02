@@ -2414,11 +2414,11 @@ export default function App() {
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={downloadDeIDTemplate} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Download De-ID Template</button>
-              <label style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",cursor:"pointer",display:"inline-flex",alignItems:"center"}}>
+              <label style={{...S.btn,background:"#1a6b45",color:"#ffffff",cursor:"pointer",display:"inline-flex",alignItems:"center"}}>
                 {uploading?"Uploading…":"Bulk Upload CSV / Excel"}
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
               </label>
-              <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"#0f2d1e",color:"#4db882"}}>Export CSV</button>
+              <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Export CSV</button>
               <button onClick={()=>setShowMatchExport(true)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
           
