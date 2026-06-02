@@ -346,6 +346,21 @@ const statusLabel = s => s.replace(/_/g," ").replace(/\b\w/g, l => l.toUpperCase
 const NUMERIC_FIELDS = ["recipient_pra_percent","recipient_weight_kg","recipient_height_cm","donor_weight_kg","donor_height_cm","donor_egfr","recipient_prior_transplants"];
 const DONOR_PRIORITIES = ["Primary","Secondary","Tertiary"];
 
+// Convert an email domain into a friendly center name, e.g. "sutterhealth.org" → "Sutter Health".
+function centreLabelFromDomain(domain){
+  if(!domain) return "";
+  const base=String(domain).split(".")[0].replace(/[-_]/g," ");
+  // Split run-together org words (sutterhealth → sutter health) before title-casing.
+  const spaced=base.replace(/(health|medical|hospital|clinic|care|medicine|centre|center|system|university)/gi," $1");
+  return spaced.trim().split(/\s+/).filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" ");
+}
+// The center a pair belongs to: its explicit centre field if set, else derived from the user's email domain.
+function pairCentre(p){
+  if(p?.centre&&String(p.centre).trim()) return String(p.centre).trim();
+  const domain=p?.user_email&&String(p.user_email).includes("@")?String(p.user_email).split("@")[1]?.toLowerCase():"";
+  return domain?centreLabelFromDomain(domain):"";
+}
+
 const emptyForm = {
   pair_type:"paired", recipient_name:"", recipient_blood_type:"A", recipient_pra_percent:"",
   recipient_weight_kg:"", recipient_height_cm:"", recipient_year_born:"",
@@ -1108,7 +1123,7 @@ export default function App() {
   const [filterStatus,setFilterStatus]=useState("active");
   const [filterBlood,setFilterBlood]=useState("all");
   const [filterDonorBlood,setFilterDonorBlood]=useState("all");
-  const [filterCentre,setFilterCentre]=useState("all");
+  const [centreFilter,setCentreFilter]=useState("");
   const [filterPairType,setFilterPairType]=useState("all");
   const [sortStack,setSortStack]=useState([{key:"date",dir:"desc"}]);
   const [unitSystem,setUnitSystem]=useState("metric");
@@ -1265,11 +1280,14 @@ export default function App() {
     setAuditLog(prev=>[{action,detail,user:userMeta.full_name||session?.user?.email||"Demo",time:new Date().toLocaleString(),id:Date.now()},...prev].slice(0,100));
   }
   const centres=[...new Set(visiblePairs.map(p=>p.centre).filter(Boolean))];
+  // Center options for the registry filter: explicit centre field OR derived from email domain.
+  // For admins, visiblePairs spans every domain, so this lists all centers to isolate one at a time.
+  const centreOptions=[...new Set(visiblePairs.map(pairCentre).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 
   const filteredPairs=visiblePairs.filter(p=>{
     if(filterStatus!=="all"&&p.status!==filterStatus) return false;
     if(filterBlood!=="all"&&p.recipient_blood_type!==filterBlood&&p.donor_blood_type!==filterBlood) return false;
-    if(filterCentre!=="all"&&p.centre!==filterCentre) return false;
+    if(centreFilter&&pairCentre(p)!==centreFilter) return false;
     if(filterPairType!=="all"&&p.pair_type!==filterPairType) return false;
     if(search){
       const s=search.toLowerCase();
@@ -2381,10 +2399,10 @@ export default function App() {
               <option value="all">All Types</option>
               {PAIR_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-            {centres.length>0&&(
-              <select value={filterCentre} onChange={e=>setFilterCentre(e.target.value)} style={{...S.select,width:150}}>
-                <option value="all">All Centres</option>
-                {centres.map(c=><option key={c}>{c}</option>)}
+            {centreOptions.length>0&&(
+              <select value={centreFilter} onChange={e=>setCentreFilter(e.target.value)} style={{...S.select,width:170}}>
+                <option value="">All Centers</option>
+                {centreOptions.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             )}
           </div>
