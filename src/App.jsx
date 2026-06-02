@@ -1223,6 +1223,11 @@ export default function App() {
     });
   }
 
+  // Clear a swap's status back to unproposed.
+  function resetSwapStatus(swapId){
+    setSwapStatuses(prev=>{const updated={...prev};delete updated[swapId];return updated;});
+  }
+
   if(authLoading) return <div style={{minHeight:"100vh",background:"#0d1219",display:"flex",alignItems:"center",justifyContent:"center",color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Loading PairPath…</div>;
   if(!session&&!demoMode) return <AuthScreen onDemoMode={()=>setDemoMode(true)}/>;
 
@@ -2662,6 +2667,8 @@ export default function App() {
                       <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em"}}>COMBINED SCORE</span>
                       <span style={{fontFamily:"'DM Mono', monospace",fontSize:24,fontWeight:700,color:cs.text,background:`${cs.bg}55`,borderRadius:6,padding:"2px 12px"}}>{swap.combined}</span>
                       {status&&<span style={S.tag(SWAP_STATUS_COLORS[status])}>{statusLabel(status).toUpperCase()}</span>}
+                      {status&&<button onClick={()=>resetSwapStatus(swap.id)} title="Reset status"
+                        style={{background:"none",border:"none",color:"#6a8092",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}}>✕</button>}
                       <button onClick={()=>cycleSwapStatus(swap.id)}
                         style={{...S.btn,marginLeft:"auto",padding:"7px 16px",background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18",fontSize:13}}>{btnLabel}</button>
                     </div>
