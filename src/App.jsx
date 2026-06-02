@@ -68,7 +68,8 @@ function calculateCompatibility(donor, recipient) {
   }
   if (!hasHLA) {
     // ABO compatible but no HLA — return a capped score so grid stays colorful
-    const aboScore = Math.max(0, 70 - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (cmvRisk ? 8 : 0) - (ageFlag ? 3 : 0));
+    // CMV D+/R- is flagged via cmvRisk but carries NO score penalty.
+    const aboScore = Math.max(0, 70 - (highPRA ? 15 : 0) - (sizeOk ? 0 : 4) - (ageFlag ? 3 : 0));
     return {
       compatible: true, score: aboScore, aboOnly: true,
       reasons: { abo: true, hlaMismatches: 0, highSensitization: highPRA, sizeMatch: sizeOk, cmvRisk, ageFlag, bmiFlag, ageDiff, pra }
@@ -93,7 +94,7 @@ function calculateCompatibility(donor, recipient) {
   const oDonorPenalty= dBlood==="O"&&rBlood==="AB" ? -8 : dBlood==="O"&&(rBlood==="A"||rBlood==="B") ? -3 : 0;
 
   // Modifiers (deductions only)
-  const cmvPenalty  = cmvRisk  ?  8 : 0;
+  const cmvPenalty  = 0; // CMV D+/R- is flagged via cmvRisk but carries NO score penalty
   const sizePenalty = sizeOk   ?  0 : 4;
   const agePenalty  = ageFlag  ?  3 : 0;
   const bmiPenalty  = bmiFlag  ?  2 : 0;
