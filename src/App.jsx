@@ -2282,7 +2282,7 @@ export default function App() {
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
-              {[["Strong","68+",85,false],["Good","55–67",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",0,false]].map(([l,r,sc,ao])=>(
+              {[["Strong","68+",85,false],["Good","55–67",65,false],["Incompatible","ABO ✗",0,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:13,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
                   <span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:scoreStyle(sc,ao).bg}}/>
                   {l} ({r})
@@ -2747,9 +2747,9 @@ export default function App() {
                   );
                 };
                 return (
-                  <div key={swap.id} style={{...S.card,background:"#131c26",border:`1px solid ${cs.bg}`}}>
+                  <div key={swap.id} style={{...S.card,padding:12,background:"#131c26",border:`1px solid ${cs.bg}`}}>
                     {/* Header row */}
-                    <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:14}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
                       <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em"}}>COMBINED SCORE</span>
                       <span style={{fontFamily:"'DM Mono', monospace",fontSize:24,fontWeight:700,color:cs.text,background:`${cs.bg}55`,borderRadius:6,padding:"2px 12px"}}>{swap.combined}</span>
                       {status&&<span style={S.tag(SWAP_STATUS_COLORS[status])}>{statusLabel(status).toUpperCase()}</span>}
@@ -2769,13 +2769,13 @@ export default function App() {
                         style={{...S.btn,marginLeft:"auto",padding:"7px 16px",background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18",fontSize:13}}>{btnLabel}</button>
                     </div>
                     {/* 3-column body */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:12,alignItems:"center"}}>
-                      {/* Pair A */}
-                      <div style={{padding:"8px 12px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:3}}>PAIR A</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Donor {A.donor_name||A.id} <span style={{color:"#4db882"}}>· {A.donor_blood_type}</span></div>
-                        <div style={{textAlign:"center",color:"#4db882",fontSize:14,lineHeight:1.1}}>↓</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#6ad0a0"}}>Recip {A.recipient_name||A.id} <span style={{color:"#4db882"}}>· {A.recipient_blood_type}</span></div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10,alignItems:"center"}}>
+                      {/* Pair A — donor green, recipient blue */}
+                      <div style={{padding:"6px 10px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:2}}>PAIR A</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#4db882"}}>Donor {A.donor_name||A.id} <span style={{opacity:0.75}}>· {A.donor_blood_type}</span></div>
+                        <div style={{textAlign:"center",color:"#6a8092",fontSize:12,lineHeight:1}}>↓</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Recip {A.recipient_name||A.id} <span style={{opacity:0.75}}>· {A.recipient_blood_type}</span></div>
                         {recipMeta(A)}
                       </div>
                       {/* Center — legs */}
@@ -2783,23 +2783,23 @@ export default function App() {
                         <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.06em"}}>LEG 1</div>
                         <div style={{color:"#4db882",fontSize:20,letterSpacing:"0.12em"}}>→ →</div>
                         <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l1.text,background:`${l1.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg1Score}</span>
-                        <div style={{height:12}}/>
+                        <div style={{height:8}}/>
                         <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.06em"}}>LEG 2</div>
                         <div style={{color:"#4db882",fontSize:20,letterSpacing:"0.12em"}}>← ←</div>
                         <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l2.text,background:`${l2.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg2Score}</span>
                       </div>
-                      {/* Pair B */}
-                      <div style={{padding:"8px 12px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:3}}>PAIR B</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Donor {B.donor_name||B.id} <span style={{color:"#4db882"}}>· {B.donor_blood_type}</span></div>
-                        <div style={{textAlign:"center",color:"#4db882",fontSize:14,lineHeight:1.1}}>↓</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#6ad0a0"}}>Recip {B.recipient_name||B.id} <span style={{color:"#4db882"}}>· {B.recipient_blood_type}</span></div>
+                      {/* Pair B — donor green, recipient blue */}
+                      <div style={{padding:"6px 10px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:2}}>PAIR B</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#4db882"}}>Donor {B.donor_name||B.id} <span style={{opacity:0.75}}>· {B.donor_blood_type}</span></div>
+                        <div style={{textAlign:"center",color:"#6a8092",fontSize:12,lineHeight:1}}>↓</div>
+                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Recip {B.recipient_name||B.id} <span style={{opacity:0.75}}>· {B.recipient_blood_type}</span></div>
                         {recipMeta(B)}
                       </div>
                     </div>
                     {/* Combined confidence flags for both legs */}
                     {flags.length>0&&(
-                      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
                         {flags.map((f,fi)=><span key={fi} style={S.tag(f.includes("CMV")?"#ffb86b":f.includes("Size")?"#ffd166":"#ff8a8a")}>⚠ {f}</span>)}
                       </div>
                     )}
@@ -3002,7 +3002,7 @@ export default function App() {
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8,gap:8}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginBottom:3}}>
-                          <span style={{fontSize:14,fontWeight:700,color:"#ffffff"}}>{recip.recipient_name||"Unnamed"}</span>
+                          <span style={{fontSize:14,fontWeight:700,color:"#6ab4d0"}}>{recip.recipient_name||"Unnamed"}</span>
                           <span style={S.tag("#3d8c6e")}>{recip.recipient_blood_type}</span>
                           {pra>80&&<span style={S.tag("#ff8a8a")}>HIGH PRA</span>}
                         </div>
@@ -3041,7 +3041,7 @@ export default function App() {
                       <>
                         <div style={{fontSize:13,color:"#4db882",fontFamily:"'DM Mono', monospace",marginBottom:5,letterSpacing:"0.08em"}}>BEST COMPATIBLE DONOR</div>
                         <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginBottom:4}}>
-                          <span style={{fontSize:13,fontWeight:600,color:"#c8d4dc"}}>{best.donor.donor_name}</span>
+                          <span style={{fontSize:13,fontWeight:600,color:"#4db882"}}>{best.donor.donor_name}</span>
                           <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
                           {dAge&&<span style={{fontSize:13,color:"#c4d0d9"}}>Age {dAge}</span>}
                           {best.donor.donor_egfr&&<span style={{fontSize:13,color:"#c4d0d9"}}>eGFR {best.donor.donor_egfr}</span>}
