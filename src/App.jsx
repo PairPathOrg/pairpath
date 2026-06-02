@@ -854,8 +854,8 @@ function AuthScreen({onDemoMode}) {
       {variant==="dark"?(
         <>
           <path d="M40 4 L4 40 L40 76 Z" fill="#4db882"/>
-          <path d="M40 4 L76 40 L40 76 Z" fill="rgba(255,255,255,0.2)"/>
-          <circle cx="40" cy="40" r="7" fill="#0f1c2e"/>
+          <path d="M40 4 L76 40 L40 76 Z" fill="rgba(255,255,255,0.5)"/>
+          <circle cx="40" cy="40" r="7" fill="#0a0f18"/>
         </>
       ):(
         <>
@@ -2232,8 +2232,8 @@ export default function App() {
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <svg width="32" height="32" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M40 4 L4 40 L40 76 Z" fill="#4db882"/>
-            <path d="M40 4 L76 40 L40 76 Z" fill="rgba(255,255,255,0.22)"/>
-            <circle cx="40" cy="40" r="7" fill="#0f1c2e"/>
+            <path d="M40 4 L76 40 L40 76 Z" fill="rgba(255,255,255,0.5)"/>
+            <circle cx="40" cy="40" r="7" fill="#0a0f18"/>
           </svg>
           <span style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,letterSpacing:"-0.3px"}}>
             <span style={{fontWeight:700,color:"#ffffff"}}>Pair</span><span style={{fontWeight:300,color:"#4db882"}}>Path</span>
