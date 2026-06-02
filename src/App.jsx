@@ -2793,10 +2793,6 @@ export default function App() {
         const donors = activePairs.filter(p=>p.donor_blood_type);
         const recipients = activePairs.filter(p=>p.recipient_blood_type);
 
-        // Waitlist rank
-        const recipsByWaitlist=[...recipients].filter(p=>p.recipient_dialysis_start)
-          .sort((a,b)=>new Date(a.recipient_dialysis_start)-new Date(b.recipient_dialysis_start));
-        const waitlistRank=r=>{const i=recipsByWaitlist.findIndex(p=>p.id===r.id);return i>=0?`#${i+1} of ${recipsByWaitlist.length}`:null;};
         const waitlistDuration=r=>{
           if(!r.recipient_dialysis_start) return null;
           const d=Math.floor((Date.now()-new Date(r.recipient_dialysis_start))/86400000);
@@ -2897,7 +2893,6 @@ export default function App() {
                 const pra=parseFloat(recip.recipient_pra_percent||0);
                 const rAge=calcAge(recip.recipient_year_born);
                 const dAge=best?calcAge(best.donor.donor_year_born):null;
-                const rank=waitlistRank(recip);
                 const duration=waitlistDuration(recip);
                 return(
                   <div key={recip.id} style={{...S.card,padding:14,borderColor:best?`${s.text}33`:"#3a1010"}}>
@@ -2913,7 +2908,6 @@ export default function App() {
                           {rAge&&<span>Age {rAge}</span>}
                           {recip.recipient_pra_percent&&<span>PRA {recip.recipient_pra_percent}%</span>}
                           {duration&&<span>{duration} waiting</span>}
-                          {rank&&<span style={{color:"#6ab4d0"}}>{rank}</span>}
                         </div>
                         {flags&&flags.length>0&&(
                           <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
