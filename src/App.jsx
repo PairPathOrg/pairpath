@@ -323,10 +323,12 @@ function exportSwaps(swaps, swapStatuses={}) {
 }
 
 // ── Pair Score display helpers ─────────────────────────────────────────────
-// Colors only. The five categories below are visually distinct; thresholds
-// mirror the grid legend (75 / 55 / 35). No scoring logic or ceilings change here.
+// Colors only. Color reflects the score VALUE whenever a number exists (the cell's
+// "ABO" label already signals missing HLA). Blue is reserved for truly no data —
+// a null/undefined score. Thresholds mirror the grid legend (75 / 55 / 35).
 function scoreStyle(score, aboOnly) {
-  if (aboOnly)     return { bg: "#0d2040", text: "#6ab4d0", label: "ABO Compatible" }; // ABO ok, no HLA — blue
+  if (score === null || score === undefined)
+                   return { bg: "#0d2040", text: "#6ab4d0", label: "ABO Compatible" }; // no score data — blue
   if (score >= 75) return { bg: "#0a4a32", text: "#4db882", label: "Strong" };         // green
   if (score >= 55) return { bg: "#3d3000", text: "#ffd166", label: "Good" };           // gold
   if (score >= 35) return { bg: "#2a2000", text: "#c8a84b", label: "Marginal" };       // amber
@@ -2217,7 +2219,7 @@ export default function App() {
               {["A","B","AB","O"].map(b=><option key={b}>{b}</option>)}
             </select>
             <div style={{marginLeft:"auto",display:"flex",gap:16,flexWrap:"wrap"}}>
-              {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",null,false]].map(([l,r,sc,ao])=>(
+              {[["Strong","75+",85,false],["Good","55–74",65,false],["Marginal","35–54",45,false],["ABO ✓","HLA needed",null,true],["Incompatible","ABO ✗",0,false]].map(([l,r,sc,ao])=>(
                 <span key={l} style={{fontSize:13,color:"#b0bec5",display:"flex",alignItems:"center",gap:5}}>
                   <span style={{display:"inline-block",width:10,height:10,borderRadius:2,background:scoreStyle(sc,ao).bg}}/>
                   {l} ({r})
