@@ -1184,6 +1184,7 @@ export default function App() {
   const [showAudit,setShowAudit]=useState(false);
   const [chainsLoading,setChainsLoading]=useState(false);
   const [computedChains,setComputedChains]=useState([]);
+  const [chainsComputed,setChainsComputed]=useState(false); // false until chains have run at least once
   const [swapStatuses,setSwapStatuses]=useState(()=>{try{return JSON.parse(localStorage.getItem("pairpath_swap_statuses")||"{}");}catch{return {};}});
   const [swapFilter,setSwapFilter]=useState("");
   const [swapResetConfirm,setSwapResetConfirm]=useState(null); // swapId whose reset confirmation is open
@@ -1242,8 +1243,9 @@ export default function App() {
   },[session]);
 
   // ── Async chain computation (off main thread via setTimeout yield) ─────────
+  // Runs for both the Chains view and the Dashboard (which shows chain counts).
   useEffect(()=>{
-    if(view!=="chains") return;
+    if(view!=="chains"&&view!=="dashboard") return;
     setChainsLoading(true);
     const timeout=setTimeout(()=>{
       try{
@@ -1251,6 +1253,7 @@ export default function App() {
         const result=findChains(vp);
         setComputedChains(result);
       }catch(e){setComputedChains([]);}
+      setChainsComputed(true);
       setChainsLoading(false);
     },0);
     return()=>clearTimeout(timeout);
@@ -1368,11 +1371,13 @@ export default function App() {
   };
   const stats={
     total:visiblePairs.length,active:activePairs.length,
-    completed:visiblePairs.filter(p=>p.status==="completed").length,
-    withdrawn:visiblePairs.filter(p=>p.status==="withdrawn").length,
     withMatch:activePairs.filter(p=>p.recipient_blood_type&&activePairs.some(d=>d.id!==p.id&&d.donor_blood_type&&calculateCompatibility(d,p).score>=60)).length,
-    altruistic:visiblePairs.filter(p=>p.pair_type==="altruistic").length,
-    recipientOnly:visiblePairs.filter(p=>p.pair_type==="recipient_only").length,
+    // findSwaps already restricts to active entries, so swaps.length == findSwaps(activePairs).length.
+    viableSwaps:swaps.length,
+    // Altruistic = explicitly typed OR a donor with no paired recipient.
+    altruistic:visiblePairs.filter(p=>p.pair_type==="altruistic"||(p.donor_blood_type&&!p.recipient_blood_type)).length,
+    // Recipient-only = explicitly typed OR a recipient with no paired donor.
+    recipientOnly:visiblePairs.filter(p=>p.pair_type==="recipient_only"||(p.recipient_blood_type&&!p.donor_blood_type)).length,
     chains2:chains.filter(c=>c.length===2).length,
     chains3:chains.filter(c=>c.length===3).length,
     chainsLong:chains.filter(c=>c.length>=4).length,
@@ -2816,16 +2821,15 @@ export default function App() {
               {label:"Total Entries",value:stats.total,color:"#b0bec5"},
               {label:"Active",value:stats.active,color:"#4db882"},
               {label:"With Match",value:stats.withMatch,color:"#6effc6"},
+              {label:"Viable Swaps",value:stats.viableSwaps,color:"#2dd4a0"},
               {label:"Altruistic Donors",value:stats.altruistic,color:"#ffd166"},
               {label:"Recipient Only",value:stats.recipientOnly,color:"#6ab4d0"},
-              {label:"Completed",value:stats.completed,color:"#6ab4d0"},
-              {label:"Withdrawn",value:stats.withdrawn,color:"#b0bec8"},
-              {label:"2-Way Chains",value:stats.chains2,color:"#4db882"},
-              {label:"3-Way Chains",value:stats.chains3,color:"#6ab4d0"},
-              {label:"4+ Way Chains",value:stats.chainsLong,color:"#ffd166"},
-            ].map(({label,value,color})=>(
+              {label:"2-Way Chains",value:stats.chains2,color:"#4db882",loading:chainsLoading||!chainsComputed},
+              {label:"3-Way Chains",value:stats.chains3,color:"#6ab4d0",loading:chainsLoading||!chainsComputed},
+              {label:"4+ Way Chains",value:stats.chainsLong,color:"#ffd166",loading:chainsLoading||!chainsComputed},
+            ].map(({label,value,color,loading})=>(
               <div key={label} style={{...S.card,textAlign:"center"}}>
-                <div style={{fontFamily:"'DM Mono', monospace",fontSize:30,fontWeight:500,color,lineHeight:1}}>{value}</div>
+                <div style={{fontFamily:"'DM Mono', monospace",fontSize:30,fontWeight:500,color,lineHeight:1}}>{loading?"…":value}</div>
                 <div style={{fontSize:13,color:"#c4d0d9",marginTop:6}}>{label}</div>
               </div>
             ))}
