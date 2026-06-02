@@ -2715,8 +2715,8 @@ export default function App() {
           ):filteredSwaps.length===0?(
             <div style={{...S.card,textAlign:"center",padding:40,color:"#b0bec8",fontSize:13}}>No swaps with status “{statusLabel(swapFilter)}”.</div>
           ):(
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              {filteredSwaps.map(swap=>{
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+              {filteredSwaps.map((swap,i)=>{
                 const cs=scoreStyle(swap.combined,false);
                 const l1=scoreStyle(swap.leg1Score,swap.leg1.aboOnly);
                 const l2=scoreStyle(swap.leg2Score,swap.leg2.aboOnly);
@@ -2746,59 +2746,55 @@ export default function App() {
                     </div>
                   );
                 };
+                // One pair block: green label, donor (green) → recipient (blue) + age/PRA.
+                const pairBlock=(label,p)=>(
+                  <>
+                    <div style={{fontFamily:"'DM Mono', monospace",fontSize:12,color:"#4db882",letterSpacing:"0.08em",marginBottom:2}}>{label}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#4db882"}}>Donor {p.donor_name||p.id} <span style={{color:"#c4d0d9",fontWeight:400}}>· {p.donor_blood_type}</span></div>
+                    <div style={{color:"#6a8092",fontSize:12,lineHeight:1.1}}>↓</div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#6ab4d0"}}>Recip {p.recipient_name||p.id} <span style={{color:"#c4d0d9",fontWeight:400}}>· {p.recipient_blood_type}</span></div>
+                    {recipMeta(p)}
+                  </>
+                );
+                const divider=<div style={{borderTop:"1px solid #1e2d3d",margin:"8px 0"}}/>;
                 return (
-                  <div key={swap.id} style={{...S.card,padding:12,background:"#131c26",border:`1px solid ${cs.bg}`}}>
-                    {/* Header row */}
-                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
-                      <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em"}}>COMBINED SCORE</span>
-                      <span style={{fontFamily:"'DM Mono', monospace",fontSize:24,fontWeight:700,color:cs.text,background:`${cs.bg}55`,borderRadius:6,padding:"2px 12px"}}>{swap.combined}</span>
-                      {status&&<span style={S.tag(SWAP_STATUS_COLORS[status])}>{statusLabel(status).toUpperCase()}</span>}
-                      {status&&(swapResetConfirm===swap.id?(
-                        <span style={{display:"inline-flex",alignItems:"center",gap:8,background:"#1a2535",border:"1px solid #2a3d52",borderRadius:6,padding:"4px 10px"}}>
-                          <span style={{fontSize:13,color:"#b0bec5"}}>Remove {statusLabel(status)} status?</span>
-                          <button onClick={()=>{resetSwapStatus(swap.id);setSwapResetConfirm(null);}}
-                            style={{...S.btn,padding:"3px 10px",fontSize:13,background:"#3a1010",color:"#ff8a8a"}}>Yes, remove</button>
-                          <button onClick={()=>setSwapResetConfirm(null)}
-                            style={{...S.btn,padding:"3px 10px",fontSize:13,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Cancel</button>
-                        </span>
-                      ):(
-                        <button onClick={()=>setSwapResetConfirm(swap.id)} title="Reset status"
-                          style={{background:"none",border:"none",color:"#6a8092",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}}>✕</button>
-                      ))}
-                      <button onClick={()=>cycleSwapStatus(swap.id)}
-                        style={{...S.btn,marginLeft:"auto",padding:"7px 16px",background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18",fontSize:13}}>{btnLabel}</button>
-                    </div>
-                    {/* 3-column body — top-aligned so panels hug their content (no floating dead space) */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:10,alignItems:"start"}}>
-                      {/* Pair A — donor green, recipient blue */}
-                      <div style={{padding:"6px 10px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:2}}>PAIR A</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#4db882"}}>Donor {A.donor_name||A.id} <span style={{opacity:0.75}}>· {A.donor_blood_type}</span></div>
-                        <div style={{textAlign:"center",color:"#6a8092",fontSize:12,lineHeight:1}}>↓</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Recip {A.recipient_name||A.id} <span style={{opacity:0.75}}>· {A.recipient_blood_type}</span></div>
-                        {recipMeta(A)}
+                  <div key={swap.id} style={{...S.card,padding:14,borderColor:`${cs.text}33`}}>
+                    {/* Top: index + status (left), combined score + propose (right) */}
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",minWidth:0}}>
+                        <span style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.05em"}}>SWAP #{i+1}</span>
+                        {status&&<span style={S.tag(SWAP_STATUS_COLORS[status])}>{statusLabel(status).toUpperCase()}</span>}
+                        {status&&<button onClick={()=>setSwapResetConfirm(swapResetConfirm===swap.id?null:swap.id)} title="Reset status"
+                          style={{background:"none",border:"none",color:"#6a8092",cursor:"pointer",fontSize:13,lineHeight:1,padding:0}}>✕</button>}
                       </div>
-                      {/* Center — legs (compact: arrow folded into the label so height matches the panels) */}
-                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:96,textAlign:"center"}}>
-                        <div>
-                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:12,color:"#b0bec8",letterSpacing:"0.05em",marginBottom:2}}>LEG 1 → →</div>
-                          <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l1.text,background:`${l1.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg1Score}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                        <div style={{textAlign:"center",padding:"4px 10px",borderRadius:8,background:cs.bg}}>
+                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:18,fontWeight:700,color:cs.text,lineHeight:1}}>{swap.combined}</div>
+                          <div style={{fontSize:11,color:`${cs.text}cc`,letterSpacing:"0.05em",marginTop:1}}>COMBINED</div>
                         </div>
-                        <div>
-                          <div style={{fontFamily:"'DM Mono', monospace",fontSize:12,color:"#b0bec8",letterSpacing:"0.05em",marginBottom:2}}>← ← LEG 2</div>
-                          <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l2.text,background:`${l2.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg2Score}</span>
-                        </div>
-                      </div>
-                      {/* Pair B — donor green, recipient blue */}
-                      <div style={{padding:"6px 10px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:2}}>PAIR B</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#4db882"}}>Donor {B.donor_name||B.id} <span style={{opacity:0.75}}>· {B.donor_blood_type}</span></div>
-                        <div style={{textAlign:"center",color:"#6a8092",fontSize:12,lineHeight:1}}>↓</div>
-                        <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Recip {B.recipient_name||B.id} <span style={{opacity:0.75}}>· {B.recipient_blood_type}</span></div>
-                        {recipMeta(B)}
+                        <button onClick={()=>cycleSwapStatus(swap.id)}
+                          style={{...S.btn,padding:"6px 12px",fontSize:13,background:status?"transparent":SWAP_STATUS_COLORS.proposed,border:status?"1px solid #2a3d52":"none",color:status?"#b0bec5":"#0a0f18"}}>{btnLabel}</button>
                       </div>
                     </div>
-                    {/* Combined confidence flags for both legs */}
+                    {status&&swapResetConfirm===swap.id&&(
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#1a2535",border:"1px solid #2a3d52",borderRadius:6,padding:"4px 10px",marginTop:8}}>
+                        <span style={{fontSize:13,color:"#b0bec5"}}>Remove {statusLabel(status)} status?</span>
+                        <button onClick={()=>{resetSwapStatus(swap.id);setSwapResetConfirm(null);}}
+                          style={{...S.btn,padding:"3px 10px",fontSize:13,background:"#3a1010",color:"#ff8a8a"}}>Yes, remove</button>
+                        <button onClick={()=>setSwapResetConfirm(null)}
+                          style={{...S.btn,padding:"3px 10px",fontSize:13,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Cancel</button>
+                      </div>
+                    )}
+                    {divider}
+                    {pairBlock("PAIR A",A)}
+                    {divider}
+                    {/* Leg scores — single compact line */}
+                    <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.04em",marginBottom:8}}>
+                      LEG 1 → <span style={{color:l1.text,fontWeight:700}}>{swap.leg1Score}</span>
+                      <span style={{margin:"0 6px",color:"#3d4d5c"}}>·</span>
+                      LEG 2 ← <span style={{color:l2.text,fontWeight:700}}>{swap.leg2Score}</span>
+                    </div>
+                    {pairBlock("PAIR B",B)}
                     {flags.length>0&&(
                       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
                         {flags.map((f,fi)=><span key={fi} style={S.tag(f.includes("CMV")?"#ffb86b":f.includes("Size")?"#ffd166":"#ff8a8a")}>⚠ {f}</span>)}
