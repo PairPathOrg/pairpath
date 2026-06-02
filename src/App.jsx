@@ -252,13 +252,39 @@ function findChains(pairs) {
 const SWAP_STATUS_CYCLE = ["proposed","accepted","scheduled","completed"];
 const SWAP_STATUS_COLORS = { proposed:"#6ab4d0", accepted:"#4db882", scheduled:"#ffd166", completed:"#90a4b4" };
 
-// Confidence flags for a single leg, derived from a calculateCompatibility result.
-function swapLegFlags(result){
+// Confidence flags for a single swap leg (donor → recipient), made specific with the
+// actual entry IDs, values and units. legLabel (e.g. "Leg 1") prefixes the directional
+// flags; the recipient-only High PRA flag carries no leg prefix.
+function swapLegFlags(donor, recipient, result, legLabel=""){
   const r = result?.reasons || {};
   const flags = [];
-  if(r.cmvRisk) flags.push("CMV D+/R-");
-  if(r.sizeMatch===false) flags.push("Size gap");
-  if(r.highSensitization) flags.push("High PRA");
+  const dId = donor?.donor_name || donor?.id || "Donor";
+  const rId = recipient?.recipient_name || recipient?.id || "Recipient";
+  const prefix = legLabel ? `${legLabel} · ` : "";
+
+  // Size gap — donor vs recipient weight, with the kg difference.
+  if(r.sizeMatch===false){
+    const dw = cleanWeight(donor?.donor_weight_kg);
+    const rw = cleanWeight(recipient?.recipient_weight_kg);
+    flags.push(dw!=null&&rw!=null
+      ? `${prefix}Size gap: ${dId} (${dw}kg) → ${rId} (${rw}kg), ${Math.abs(Math.round(dw-rw))}kg difference`
+      : `${prefix}Size gap: ${dId} → ${rId}`);
+  }
+  // CMV D+/R- — donor positive into recipient negative.
+  if(r.cmvRisk){
+    flags.push(`${prefix}CMV risk: Donor ${dId} D+, Recipient ${rId} R−`);
+  }
+  // Age gap — donor vs recipient age, with the year difference.
+  if(r.ageFlag){
+    const da = calcAge(donor?.donor_year_born);
+    const ra = calcAge(recipient?.recipient_year_born);
+    if(da!=null&&ra!=null) flags.push(`${prefix}Age gap: Donor ${dId} age ${da}, Recipient ${rId} age ${ra}, ${Math.abs(da-ra)}yr difference`);
+  }
+  // High PRA — a property of the recipient, so no leg prefix.
+  if(r.highSensitization){
+    const pra = recipient?.recipient_pra_percent;
+    flags.push(`High PRA: ${rId} at ${pra}% — rare compatible match`);
+  }
   return flags;
 }
 
@@ -294,7 +320,9 @@ function findSwaps(pairs) {
 }
 
 function exportSwaps(swaps, swapStatuses={}) {
-  const flagStr = result => swapLegFlags(result).join("; ") || "None";
+  // Leg 1 = Pair A donor → Pair B recipient; Leg 2 = Pair B donor → Pair A recipient.
+  // No leg prefix here — the CSV column header already names the leg.
+  const flagStr = (donor, recipient, result) => swapLegFlags(donor, recipient, result).join("; ") || "None";
   const csvCell = v => { const s=String(v??""); return s.includes(",")?`"${s}"`:s; };
   const header = "Combined Score,Status,Pair A Donor,Pair A Donor Blood Type,Pair A Recipient,Pair A Recipient Blood Type,Leg 1 Score,Leg 1 Flags,Pair B Donor,Pair B Donor Blood Type,Pair B Recipient,Pair B Recipient Blood Type,Leg 2 Score,Leg 2 Flags";
   const lines = swaps.map(w => [
@@ -305,13 +333,13 @@ function exportSwaps(swaps, swapStatuses={}) {
     w.pairA.recipient_name || w.pairA.id,
     w.pairA.recipient_blood_type,
     w.leg1Score,
-    flagStr(w.leg1),
+    flagStr(w.pairA, w.pairB, w.leg1),
     w.pairB.donor_name || w.pairB.id,
     w.pairB.donor_blood_type,
     w.pairB.recipient_name || w.pairB.id,
     w.pairB.recipient_blood_type,
     w.leg2Score,
-    flagStr(w.leg2),
+    flagStr(w.pairB, w.pairA, w.leg2),
   ].map(csvCell).join(","));
   const disclaimer = [
     `PairPath Swap Analysis Export — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
@@ -2691,9 +2719,10 @@ export default function App() {
                 const idx=SWAP_STATUS_CYCLE.indexOf(status);
                 const nextStatus=idx<0?"proposed":(idx>=SWAP_STATUS_CYCLE.length-1?null:SWAP_STATUS_CYCLE[idx+1]);
                 const btnLabel=!status?"Propose":(nextStatus?`Mark ${statusLabel(nextStatus)}`:"Reset");
+                // Leg 1 = Pair A donor → Pair B recipient; Leg 2 = Pair B donor → Pair A recipient.
                 const flags=[
-                  ...swapLegFlags(swap.leg1).map(f=>`Leg 1 · ${f}`),
-                  ...swapLegFlags(swap.leg2).map(f=>`Leg 2 · ${f}`),
+                  ...swapLegFlags(swap.pairA, swap.pairB, swap.leg1, "Leg 1"),
+                  ...swapLegFlags(swap.pairB, swap.pairA, swap.leg2, "Leg 2"),
                 ];
                 const A=swap.pairA, B=swap.pairB;
                 // Recipient meta (age · PRA) — omit any missing field entirely, render nothing if both absent.
