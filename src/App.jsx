@@ -275,43 +275,89 @@ const emptyForm = {
   status:"active", notes:"", centre:"",
 };
 
-// ── CSV ────────────────────────────────────────────────────────────────────
-function downloadDeIDTemplate() {
-  // Simple two-sheet approach via CSV — one file for donors, one for recipients
-  // Plain, no styling, 100 rows each, clear headers
-  const recipRows = [["Recipient ID","Full Name (Last, First)","Notes"]];
-  const donorRows = [["Donor ID","Full Name (Last, First)","Notes"]];
-  for(let i=1;i<=100;i++){recipRows.push([`R${i}`,"",""]);}
-  for(let i=1;i<=100;i++){donorRows.push([`D${i}`,"",""]);}
-
-  // Combine into one CSV with a separator
-  const lines=[
-    "PAIRPATH DE-IDENTIFICATION LOOKUP TABLE",
-    "Fill in before uploading to PairPath. Keep this file private.",
-    "Assign IDs to your patients then upload D1/R1 etc. as names in PairPath.",
-    "",
-    "--- RECIPIENTS ---",
-    ...recipRows.map(r=>r.join(",")),
-    "",
-    "--- DONORS ---",
-    ...donorRows.map(r=>r.join(",")),
-    "",
-    "--- COPILOT RE-IDENTIFICATION PROMPT ---",
-    "Paste this into Copilot after exporting matches from PairPath:",
-    "",
-    '"I have two files. File 1 is my ID lookup table with columns: ID and Full Name.',
-    'File 2 is a match export from PairPath with columns: Donor Recipient Pair Score and others.',
-    'The Donor and Recipient columns contain anonymized IDs like D1 R3 etc.',
-    'Please replace each Donor ID with the matching Full Name from File 1.',
-    'Do the same for the Recipient column.',
-    'Keep all other columns unchanged.',
-    'Output a clean spreadsheet sorted by Pair Score highest to lowest.',
-    'Tell me if any ID in the match export is not found in the lookup table."',
-  ];
-
-  const blob=new Blob([lines.join("\n")],{type:"text/csv"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="PairPath_DeID_Lookup.csv";a.click();
+// ── De-ID lookup workbook (.xlsx) ────────────────────────────────────────────
+// Ensure SheetJS (XLSX) is loaded — reuses the same CDN build the xlsx import uses.
+async function ensureXLSX(){
+  if(!window.XLSX){
+    await new Promise((res,rej)=>{
+      const s=document.createElement("script");
+      s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload=res;s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+  return window.XLSX;
 }
+
+const LOOKUP_INSTRUCTIONS = `HOW TO RE-IDENTIFY YOUR PAIRPATH MATCH EXPORT
+
+You exported a match report from PairPath. The names show as D1, R1, etc.
+This workbook tells you who each ID belongs to.
+
+WHAT YOU NEED
+- This workbook (PairPath_ID_Lookup.xlsx)
+- Your match export file (pairpath_matches.csv)
+- Microsoft Excel
+
+STEP 1
+Open your match export file (pairpath_matches.csv) in Excel.
+You will see columns like Recipient, Donor with IDs like R1, D3.
+
+STEP 2
+Open this workbook. You are on the Instructions sheet.
+Click the tab at the bottom that says "Lookup Table" to see all the names.
+
+STEP 3
+Go back to your match export. Click on the first empty column header
+after your last column. Type "Recipient Name" as the header.
+
+STEP 4
+Click the cell below that header (first data row).
+Type this formula exactly — replace B2 with the cell that contains your
+first Recipient ID:
+
+=VLOOKUP(B2,'[PairPath_ID_Lookup.xlsx]Lookup Table'!$A:$B,2,FALSE)
+
+Press Enter. You will see the real name appear.
+
+STEP 5
+Click that cell again. Copy it (Ctrl+C).
+Select all the cells below it in the same column (one per row of data).
+Paste (Ctrl+V). All recipient names will fill in.
+
+STEP 6
+Repeat Steps 3-5 for the Donor column. Create a new column called
+"Donor Name" and use the same VLOOKUP formula pointing to your Donor ID column.
+
+STEP 7
+Once all names are filled in, select BOTH new name columns.
+Right-click → Copy. Then right-click again → Paste Special → Values.
+This locks in the names so they no longer depend on the formula.
+
+STEP 8
+Save your file with a new name.
+IMPORTANT: Never upload this re-identified file back into PairPath.
+Real names must never enter the PairPath database.
+
+NEED HELP?
+If a cell shows #N/A it means that ID was not found in the lookup table.
+Check that both files are open in Excel at the same time.`;
+
+// Generate + download the PairPath ID lookup workbook (.xlsx) with two sheets:
+//   "Lookup Table" — ID, Full Name, Role, populated with all anonymized names
+//   "Instructions" — re-identification walkthrough (exact text above)
+// entries: [{id, name, role}]. An empty list yields a blank lookup template.
+async function generateLookupWorkbook(entries=[]){
+  const XLSX=await ensureXLSX();
+  const wb=XLSX.utils.book_new();
+  const lookupAoa=[["ID","Full Name","Role"],...entries.map(e=>[e.id,e.name,e.role])];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(lookupAoa),"Lookup Table");
+  const instrAoa=LOOKUP_INSTRUCTIONS.split("\n").map(line=>[line]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(instrAoa),"Instructions");
+  XLSX.writeFile(wb,"PairPath_ID_Lookup.xlsx");
+}
+
+// "Download De-ID Template" button — blank lookup workbook (no names yet) + instructions.
+function downloadDeIDTemplate(){ generateLookupWorkbook([]); }
 
 function exportMatchCards(pairs) {
   const donors = pairs.filter(p=>p.donor_blood_type&&p.status!=="inactive");
@@ -451,6 +497,8 @@ function exportMatches(pairs, level="standard") {
         donor_blood:      donor.donor_blood_type,
         donor_age:        calcAge(donor.donor_year_born)||"",
         donor_weight:     donorWt,
+        donor_height:     donor.donor_height_cm||"",
+        recipient_height: recipient.recipient_height_cm||"",
         weight_gap_kg:    donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
         flags,
         donor_egfr:       donor.donor_egfr||"",
@@ -462,16 +510,17 @@ function exportMatches(pairs, level="standard") {
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
 
+  // Donor information always comes before recipient information (left to right).
   let header, lines;
   if(level==="quick"){
-    header = "Pair Score,Recipient,Blood Type,PRA %,Waitlist Duration,Waitlist Rank,Donor,Blood Type,Flags";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.pra,r.waitlist_duration,r.waitlist_rank,r.donor,r.donor_blood,r.flags].join(","));
+    header = "Pair Score,Donor,Donor Blood Type,Recipient,Recipient Blood Type,Recipient PRA%";
+    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.recipient,r.recipient_blood,r.pra].join(","));
   } else if(level==="full"){
-    header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Date,Waitlist Duration,Waitlist Rank,Weight (kg),CMV,Donor,Blood Type,Age,Weight (kg),eGFR,CMV,Weight Gap (kg),Flags,HLA Notes";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.recipient_cmv,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_egfr,r.donor_cmv,r.weight_gap_kg,r.flags,r.hla_notes].join(","));
+    header = "Pair Score,Donor,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Donor CMV,Recipient,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Recipient CMV,Weight Gap (kg),Flags,HLA Notes";
+    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.donor_cmv,r.recipient,r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.recipient_cmv,r.weight_gap_kg,r.flags,r.hla_notes].join(","));
   } else {
-    header = "Pair Score,Recipient,Blood Type,Age,PRA %,Waitlist Duration,Waitlist Rank,Weight (kg),Donor,Blood Type,Age,Weight (kg),Weight Gap (kg),Flags";
-    lines  = rows.map(r=>[r.pair_score,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_duration,r.waitlist_rank,r.recipient_weight,r.donor,r.donor_blood,r.donor_age,r.donor_weight,r.weight_gap_kg,r.flags].join(","));
+    header = "Pair Score,Donor,Donor Blood Type,Donor Age,Recipient,Recipient Blood Type,Recipient Age,Recipient PRA%,Waitlist Date,Weight Gap (kg),Flags";
+    lines  = rows.map(r=>[r.pair_score,r.donor,r.donor_blood,r.donor_age,r.recipient,r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.weight_gap_kg,r.flags].join(","));
   }
   const disclaimer = [
     `PairPath Match Export — Generated ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}`,
@@ -1365,6 +1414,8 @@ export default function App() {
       hLower.includes("name")||
       hLower.includes("patient")||
       hLower.includes("donor")||
+      hLower.includes("living donor")||
+      hLower.includes("living")||
       hLower.includes("recipient")||
       hLower.includes("subject")||
       hLower.includes("ld ")||
@@ -1397,13 +1448,13 @@ export default function App() {
     if(!map.has(key)) map.set(key,(role==="donor"?"D":"R")+(map.size+1));
     return map.get(key);
   }
-  // Build + download ONE combined lookup CSV for the whole context: ID, Full Name, Role.
+  // Build + download ONE combined lookup workbook (.xlsx) for the whole context:
+  // Sheet "Lookup Table" (ID, Full Name, Role) + Sheet "Instructions".
   function downloadCombinedLookup(ctx){
-    const lines=["ID,Full Name,Role"];
-    ctx.donorNames.forEach((id,name)=>lines.push(`${id},"${name}",Donor`));
-    ctx.recipNames.forEach((id,name)=>lines.push(`${id},"${name}",Recipient`));
-    const blob=new Blob([lines.join("\n")],{type:"text/csv"});
-    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="PairPath_ID_Lookup.csv";a.click();
+    const entries=[];
+    ctx.donorNames.forEach((id,name)=>entries.push({id,name,role:"Donor"}));
+    ctx.recipNames.forEach((id,name)=>entries.push({id,name,role:"Recipient"}));
+    generateLookupWorkbook(entries);
   }
   // Anonymize one sheet's RAW header+row arrays into the shared ctx. Returns new rows; NO download.
   // Role is driven by pairType: altruistic→donor (D), recipient_only→recipient (R),
@@ -2094,9 +2145,12 @@ export default function App() {
                       {activePairs.filter(p=>p.donor_blood_type).filter(p=>filterDonorBlood==="all"||p.donor_blood_type===filterDonorBlood).map(donor=>{
                         if(donor.id===recipient.id) return <td key={donor.id} style={{textAlign:"center",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:"#131c26",color:"#2a3a4a"}}>—</td>;
                         const result=calculateCompatibility(donor,recipient);
-                        // Never blank: null/undefined score (missing data) renders as a red 0 = ABO incompatible
-                        const scoreVal=result.score??0;
-                        const s=scoreStyle(scoreVal,result.aboOnly);
+                        // Off the diagonal a cell is NEVER blank: a null/undefined/blank result
+                        // renders as a red ABO-incompatible cell showing 0 and "ABO".
+                        const rawScore=result?.score;
+                        const isBlank=rawScore===null||rawScore===undefined||rawScore==="";
+                        const scoreVal=isBlank?0:rawScore;
+                        const s=isBlank?scoreStyle(0,false):scoreStyle(scoreVal,result.aboOnly);
                         const cellKey=`${donor.id}-${recipient.id}`;
                         return (
                           <td key={donor.id}
@@ -2106,7 +2160,7 @@ export default function App() {
                             title={`ABO: ${result.reasons.abo?"✓":"✗"} | ${result.aboOnly?"ABO-only":"HLA MM: "+(result.reasons.hlaMismatches??0)} | ${s.label}`}
                             style={{textAlign:"center",cursor:"pointer",borderBottom:"1px solid #141c24",borderRight:"1px solid #141c24",background:hoveredCell===cellKey?s.bg:`${s.bg}99`,transition:"background 0.15s",padding:"10px 6px"}}>
                             <div style={{fontFamily:"'DM Mono', monospace",fontSize:16,fontWeight:500,color:s.text,lineHeight:1}}>{scoreVal}</div>
-                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{result.aboOnly?"ABO":`${result.reasons.hlaMismatches??0}MM`}</div>
+                            <div style={{fontSize:13,color:`${s.text}cc`,marginTop:3}}>{isBlank?"ABO":(result.aboOnly?"ABO":`${result.reasons.hlaMismatches??0}MM`)}</div>
                           </td>
                         );
                       })}
