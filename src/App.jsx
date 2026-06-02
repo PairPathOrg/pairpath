@@ -39,7 +39,7 @@ function countHLAMismatches(donor, recipient) {
 // TODO: Crossmatch result should override score entirely if available.
 function calculateCompatibility(donor, recipient) {
   if (!donor?.donor_blood_type || !recipient?.recipient_blood_type) {
-    return { compatible: false, score: null, aboOnly: true, reasons: {} };
+    return { compatible: false, score: 0, aboOnly: true, reasons: {} };
   }
 
   const aboOk = checkABO(donor.donor_blood_type, recipient.recipient_blood_type);
