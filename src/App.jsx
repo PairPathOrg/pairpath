@@ -2696,6 +2696,22 @@ export default function App() {
                   ...swapLegFlags(swap.leg2).map(f=>`Leg 2 · ${f}`),
                 ];
                 const A=swap.pairA, B=swap.pairB;
+                // Recipient meta (age · PRA) — omit any missing field entirely, render nothing if both absent.
+                const recipMeta=p=>{
+                  const age=calcAge(p.recipient_year_born);
+                  const pra=p.recipient_pra_percent;
+                  const hasPra=pra!==null&&pra!==undefined&&pra!=="";
+                  const parts=[];
+                  if(age) parts.push(`Age ${age}`);
+                  if(hasPra) parts.push(`PRA ${pra}%`);
+                  if(!parts.length) return null;
+                  return (
+                    <div style={{fontSize:13,color:"#b0bec8",marginTop:2}}>
+                      {parts.join(" · ")}
+                      {hasPra&&pra>80&&<span style={{color:"#ff8a8a",marginLeft:4}}>HIGH</span>}
+                    </div>
+                  );
+                };
                 return (
                   <div key={swap.id} style={{...S.card,background:"#131c26",border:`1px solid ${cs.bg}`}}>
                     {/* Header row */}
@@ -2721,12 +2737,12 @@ export default function App() {
                     {/* 3-column body */}
                     <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:12,alignItems:"center"}}>
                       {/* Pair A */}
-                      <div style={{padding:"12px 14px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:6}}>PAIR A</div>
+                      <div style={{padding:"8px 12px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:3}}>PAIR A</div>
                         <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Donor {A.donor_name||A.id} <span style={{color:"#4db882"}}>· {A.donor_blood_type}</span></div>
-                        <div style={{textAlign:"center",color:"#4db882",fontSize:16,margin:"2px 0"}}>↓</div>
+                        <div style={{textAlign:"center",color:"#4db882",fontSize:14,lineHeight:1.1}}>↓</div>
                         <div style={{fontSize:14,fontWeight:600,color:"#6ad0a0"}}>Recip {A.recipient_name||A.id} <span style={{color:"#4db882"}}>· {A.recipient_blood_type}</span></div>
-                        <div style={{fontSize:13,color:"#b0bec8",marginTop:4}}>Age {calcAge(A.recipient_year_born)||"—"} · PRA {A.recipient_pra_percent??"?"}%{A.recipient_pra_percent>80&&<span style={{color:"#ff8a8a",marginLeft:4}}>HIGH</span>}</div>
+                        {recipMeta(A)}
                       </div>
                       {/* Center — legs */}
                       <div style={{textAlign:"center",minWidth:120}}>
@@ -2739,12 +2755,12 @@ export default function App() {
                         <span style={{fontFamily:"'DM Mono', monospace",fontSize:15,fontWeight:600,color:l2.text,background:`${l2.bg}55`,borderRadius:5,padding:"1px 8px"}}>{swap.leg2Score}</span>
                       </div>
                       {/* Pair B */}
-                      <div style={{padding:"12px 14px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
-                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:6}}>PAIR B</div>
+                      <div style={{padding:"8px 12px",borderRadius:8,background:"#1a2535",border:"1px solid #2a3d52"}}>
+                        <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.08em",marginBottom:3}}>PAIR B</div>
                         <div style={{fontSize:14,fontWeight:600,color:"#6ab4d0"}}>Donor {B.donor_name||B.id} <span style={{color:"#4db882"}}>· {B.donor_blood_type}</span></div>
-                        <div style={{textAlign:"center",color:"#4db882",fontSize:16,margin:"2px 0"}}>↓</div>
+                        <div style={{textAlign:"center",color:"#4db882",fontSize:14,lineHeight:1.1}}>↓</div>
                         <div style={{fontSize:14,fontWeight:600,color:"#6ad0a0"}}>Recip {B.recipient_name||B.id} <span style={{color:"#4db882"}}>· {B.recipient_blood_type}</span></div>
-                        <div style={{fontSize:13,color:"#b0bec8",marginTop:4}}>Age {calcAge(B.recipient_year_born)||"—"} · PRA {B.recipient_pra_percent??"?"}%{B.recipient_pra_percent>80&&<span style={{color:"#ff8a8a",marginLeft:4}}>HIGH</span>}</div>
+                        {recipMeta(B)}
                       </div>
                     </div>
                     {/* Combined confidence flags for both legs */}
