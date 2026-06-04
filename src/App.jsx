@@ -8,7 +8,13 @@ document.head.appendChild(fontLink);
 
 // ── Matching Engine ────────────────────────────────────────────────────────
 const ABO_COMPATIBLE = { O:["O","A","B","AB"], A:["A","AB"], B:["B","AB"], AB:["AB"] };
-function calcAge(y) { return y ? new Date().getFullYear() - parseInt(y) : null; }
+function calcAge(y) {
+  if(!y) return null;
+  let yr = parseInt(y);
+  // Excel serial number leaked through (e.g. 40000) — convert it to its real 4-digit year first.
+  if(yr > 3000) yr = new Date((parseFloat(y)-25569)*86400000).getUTCFullYear();
+  return new Date().getFullYear() - yr;
+}
 function checkABO(d, r) { return ABO_COMPATIBLE[d]?.includes(r) ?? false; }
 
 function countHLAMismatches(donor, recipient) {
@@ -331,8 +337,17 @@ function exportDisclaimer(title){
 }
 // CSV cell — quote when the value contains a comma, quote, or newline; escape inner quotes.
 const csvCell = v => { const s=String(v??""); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
-// Integer kg from a possibly-messy weight; "" when not a sane weight.
-const exportWeight = v => { const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,""))); return (!isNaN(n)&&n>0&&n<400)?n:""; };
+// Cleaned cm height; "" when not parseable. (Weights run through cleanWeight; ages through calcAge.)
+const cleanHeight = v => { const n=Math.round(parseFloat(v)); return Number.isFinite(n)?n:""; };
+// "Excel Table" tip rows appended (after the scoring explanation) to matches and swaps CSVs.
+const EXPORT_TIP_ROWS = [
+  "TIP: Turn this into an Excel Table for easy filtering",
+  "How: Click any cell in the data → Press Ctrl+T → Check 'My table has headers' → Click OK",
+  "Then filter by Donor Name to see all matches for one donor, Recipient Name for one patient, or Blood Type to narrow by ABO.",
+  "Sort by Pair Score or Combined Score descending to surface the strongest matches first.",
+  "With hundreds of rows, filtering by a single name answers the question a coordinator actually asks.",
+  "",
+].map(r=>`"${r}"`).join("\n");
 // Combined notes across entries: HLA notes first, then general notes; deduped.
 function combinedNotes(...entries){
   const hla=[], gen=[];
@@ -346,25 +361,40 @@ function combinedNotes(...entries){
 }
 
 function exportSwaps(swaps, swapStatuses={}) {
-  // Each person: ID column, then an adjacent empty Name column (VLOOKUP re-identification), then clinical columns.
-  const donorBlock = p => [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)||"", exportWeight(p.donor_weight_kg), p.donor_height_cm||"", p.donor_egfr||""];
-  const recipBlock = p => [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)||"", exportWeight(p.recipient_weight_kg), p.recipient_height_cm||"", p.recipient_pra_percent??""];
+  // Columns are ordered to read the cross-donation as two legs:
+  //   Leg 1 = Pair 1 Donor → Pair 2 Recipient (Pair 1 Score), then a ‖ divider,
+  //   Leg 2 = Pair 2 Donor → Pair 1 Recipient (Pair 2 Score).
+  // Each person: ID, adjacent empty Name column (VLOOKUP), then cleaned clinical columns.
+  const donorCols = p => [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)??"", cleanWeight(p.donor_weight_kg)??"", cleanHeight(p.donor_height_cm), p.donor_egfr||""];
+  const recipCols = p => [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)??"", cleanWeight(p.recipient_weight_kg)??"", cleanHeight(p.recipient_height_cm), p.recipient_pra_percent??""];
   const donorHdr = n => [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`,`Pair ${n} Donor eGFR`];
   const recipHdr = n => [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} Recipient Weight (kg)`,`Pair ${n} Recipient Height (cm)`,`Pair ${n} PRA%`];
-  // Per-leg flags, CMV excluded (CMV is removed from all exports).
+  // Per-leg flags labeled Pair 1 / Pair 2, CMV excluded (CMV is removed from all exports).
   const swapFlags = w => [
-    ...swapLegFlags(w.pairA, w.pairB, w.leg1, "Leg 1"),
-    ...swapLegFlags(w.pairB, w.pairA, w.leg2, "Leg 2"),
+    ...swapLegFlags(w.pairA, w.pairB, w.leg1, "Pair 1"),
+    ...swapLegFlags(w.pairB, w.pairA, w.leg2, "Pair 2"),
   ].filter(f=>!f.includes("CMV")).join("; ")||"None";
 
-  const headerCols = ["Combined Score", ...donorHdr(1), ...recipHdr(1), "Pair 1 Score", ...donorHdr(2), ...recipHdr(2), "Pair 2 Score", "Flags", "Notes", "Status"];
+  const headerCols = [
+    "Combined Score",
+    ...donorHdr(1), "gives to →", ...recipHdr(2), "Pair 1 Score",
+    "‖",
+    ...donorHdr(2), "gives to →", ...recipHdr(1), "Pair 2 Score",
+    "Flags","Notes","Status",
+  ];
   const sorted = [...swaps].sort((a,b)=>b.combined-a.combined);
   const lines = sorted.map(w=>{
-    const row=[w.combined, ...donorBlock(w.pairA), ...recipBlock(w.pairA), w.leg1Score, ...donorBlock(w.pairB), ...recipBlock(w.pairB), w.leg2Score, swapFlags(w), combinedNotes(w.pairA, w.pairB), swapStatuses[w.id]||"none"];
+    const row=[
+      w.combined,
+      ...donorCols(w.pairA), "→", ...recipCols(w.pairB), w.leg1Score,
+      "‖",
+      ...donorCols(w.pairB), "→", ...recipCols(w.pairA), w.leg2Score,
+      swapFlags(w), combinedNotes(w.pairA, w.pairB), swapStatuses[w.id]||"none",
+    ];
     return row.map(csvCell).join(",");
   });
   const header = headerCols.map(csvCell).join(",");
-  const blob = new Blob([[exportDisclaimer("PairPath Swap Analysis Export"),header,...lines].join("\n")],{type:"text/csv"});
+  const blob = new Blob([[exportDisclaimer("PairPath Swap Analysis Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_swaps.csv"; a.click();
 }
 
@@ -381,15 +411,15 @@ function exportChains(chains, allPairs=[]) {
       return {
         donor: step.donorName||d.donor_name||step.donorPairId,
         donorBlood: step.donorBlood||d.donor_blood_type||"",
-        donorAge: calcAge(d.donor_year_born)||"",
-        donorWeight: exportWeight(d.donor_weight_kg),
-        donorHeight: d.donor_height_cm||"",
+        donorAge: calcAge(d.donor_year_born)??"",
+        donorWeight: cleanWeight(d.donor_weight_kg)??"",
+        donorHeight: cleanHeight(d.donor_height_cm),
         donorEgfr: d.donor_egfr||"",
         recipient: step.recipientName||r.recipient_name||step.recipientPairId,
         recipientBlood: step.recipientBlood||r.recipient_blood_type||"",
-        recipientAge: calcAge(r.recipient_year_born)||"",
-        recipientWeight: exportWeight(r.recipient_weight_kg),
-        recipientHeight: r.recipient_height_cm||"",
+        recipientAge: calcAge(r.recipient_year_born)??"",
+        recipientWeight: cleanWeight(r.recipient_weight_kg)??"",
+        recipientHeight: cleanHeight(r.recipient_height_cm),
         pra: r.recipient_pra_percent??"",
         d, r,
       };
@@ -494,59 +524,49 @@ async function ensureXLSX(){
   return window.XLSX;
 }
 
-const LOOKUP_INSTRUCTIONS = `HOW TO RE-IDENTIFY YOUR PAIRPATH MATCH EXPORT
+const LOOKUP_INSTRUCTIONS = `HOW TO RE-IDENTIFY YOUR PAIRPATH EXPORT
 
-You exported a match report from PairPath. The names show as D1, R1, etc.
+You exported a report from PairPath. Names show as D1, R1 etc.
 This workbook tells you who each ID belongs to.
 
 WHAT YOU NEED
-- This workbook (PairPath_ID_Lookup.xlsx)
-- Your match export file (pairpath_matches.csv)
-- Microsoft Excel
+- This workbook (PairPath_ID_Lookup.xlsx) — keep it private, contains real names
+- Your export file: pairpath_matches.csv OR pairpath_swaps.csv
+- Microsoft Excel — both files must be open at the same time
 
-STEP 1
-Open your match export file (pairpath_matches.csv) in Excel.
-You will see columns like Recipient, Donor with IDs like R1, D3.
+STEP 1 — Open your export file in Excel
+You will see Donor Name and Recipient Name columns already in the file — blank and ready.
 
-STEP 2
-Open this workbook. You are on the Instructions sheet.
-Click the tab at the bottom that says "Lookup Table" to see all the names.
-
-STEP 3
-Go back to your match export. Click on the first empty column header
-after your last column. Type "Recipient Name" as the header.
-
-STEP 4
-Click the cell below that header (first data row).
-Type this formula exactly — replace B2 with the cell that contains your
-first Recipient ID:
-
+STEP 2 — Fill in Donor Names first
+Click the first blank cell in the Donor Name column (row 2, right next to the Donor ID column).
+Type this formula — replace B2 with the cell containing your first Donor ID:
 =VLOOKUP(B2,'[PairPath_ID_Lookup.xlsx]Lookup Table'!$A:$B,2,FALSE)
+Press Enter. The real name appears. Copy the cell, select all blank cells below it, paste.
 
-Press Enter. You will see the real name appear.
+STEP 3 — Fill in Recipient Names second
+Click the first blank cell in the Recipient Name column (right next to the Recipient ID column).
+Use the same formula — replace B2 with the cell containing your first Recipient ID:
+=VLOOKUP(F2,'[PairPath_ID_Lookup.xlsx]Lookup Table'!$A:$B,2,FALSE)
+Copy and paste down the column.
 
-STEP 5
-Click that cell again. Copy it (Ctrl+C).
-Select all the cells below it in the same column (one per row of data).
-Paste (Ctrl+V). All recipient names will fill in.
+FOR SWAPS — repeat Steps 2 and 3 for all four name columns:
+Pair 1 Donor Name, Pair 1 Recipient Name, Pair 2 Donor Name, Pair 2 Recipient Name.
+Point each formula at the ID column immediately to its left.
 
-STEP 6
-Repeat Steps 3-5 for the Donor column. Create a new column called
-"Donor Name" and use the same VLOOKUP formula pointing to your Donor ID column.
+STEP 4 — Lock in the names
+Select all name columns. Right-click → Copy → Paste Special → Values Only.
+This replaces formulas with actual names permanently.
 
-STEP 7
-Once all names are filled in, select BOTH new name columns.
-Right-click → Copy. Then right-click again → Paste Special → Values.
-This locks in the names so they no longer depend on the formula.
+STEP 5 — Turn it into an Excel Table
+Click any cell in the data → Press Ctrl+T → Check My table has headers → OK.
+Now filter by Donor Name, Recipient Name, or Blood Type instantly.
 
-STEP 8
-Save your file with a new name.
-IMPORTANT: Never upload this re-identified file back into PairPath.
-Real names must never enter the PairPath database.
+STEP 6 — Save with a new filename
+Never upload this file back into PairPath. Real names must never enter the database.
 
-NEED HELP?
-If a cell shows #N/A it means that ID was not found in the lookup table.
-Check that both files are open in Excel at the same time.`;
+IF A CELL SHOWS #N/A
+Both files must be open in Excel at the same time.
+Check that the ID matches exactly (D1 not d1).`;
 
 // Generate + download the PairPath ID lookup workbook (.xlsx) with two sheets:
 //   "Lookup Table" — ID, Full Name, Role, populated with all anonymized names
@@ -666,8 +686,8 @@ function exportMatches(pairs) {
       if(donor.id===recipient.id) return;
       const result = calculateCompatibility(donor, recipient);
       if(!result.reasons.abo) return;
-      const donorWt  = exportWeight(donor.donor_weight_kg);
-      const recipWt  = exportWeight(recipient.recipient_weight_kg);
+      const donorWt  = cleanWeight(donor.donor_weight_kg);
+      const recipWt  = cleanWeight(recipient.recipient_weight_kg);
       const waitlist = recipient.recipient_dialysis_start
         ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
       // Flags — CMV excluded; size gap + high PRA only.
@@ -679,15 +699,15 @@ function exportMatches(pairs) {
         pair_score:       result.score ?? "ABO only",
         donor:            donor.donor_name || donor.id,
         donor_blood:      donor.donor_blood_type,
-        donor_age:        calcAge(donor.donor_year_born)||"",
-        donor_weight:     donorWt,
-        donor_height:     donor.donor_height_cm||"",
+        donor_age:        calcAge(donor.donor_year_born)??"",
+        donor_weight:     donorWt??"",
+        donor_height:     cleanHeight(donor.donor_height_cm),
         donor_egfr:       donor.donor_egfr||"",
         recipient:        recipient.recipient_name || recipient.id,
         recipient_blood:  recipient.recipient_blood_type,
-        recipient_age:    calcAge(recipient.recipient_year_born)||"",
-        recipient_weight: recipWt,
-        recipient_height: recipient.recipient_height_cm||"",
+        recipient_age:    calcAge(recipient.recipient_year_born)??"",
+        recipient_weight: recipWt??"",
+        recipient_height: cleanHeight(recipient.recipient_height_cm),
         pra:              recipient.recipient_pra_percent ?? "",
         waitlist_date:    waitlist,
         waitlist_duration:waitlistStr(recipient),
@@ -701,7 +721,7 @@ function exportMatches(pairs) {
   // Each person: ID, then an adjacent empty Name column (VLOOKUP re-identification), then clinical columns.
   const header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
   const lines = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
-  const blob = new Blob([[exportDisclaimer("PairPath Match Export"),header,...lines].join("\n")],{type:"text/csv"});
+  const blob = new Blob([[exportDisclaimer("PairPath Match Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
 
@@ -2752,8 +2772,8 @@ export default function App() {
                 const btnLabel=!status?"Propose":(nextStatus?`Mark ${statusLabel(nextStatus)}`:"Reset");
                 // Leg 1 = Pair A donor → Pair B recipient; Leg 2 = Pair B donor → Pair A recipient.
                 const flags=[
-                  ...swapLegFlags(swap.pairA, swap.pairB, swap.leg1, "Leg 1"),
-                  ...swapLegFlags(swap.pairB, swap.pairA, swap.leg2, "Leg 2"),
+                  ...swapLegFlags(swap.pairA, swap.pairB, swap.leg1, "Pair 1"),
+                  ...swapLegFlags(swap.pairB, swap.pairA, swap.leg2, "Pair 2"),
                 ];
                 const A=swap.pairA, B=swap.pairB;
                 // Recipient meta (age · PRA) — omit any missing field entirely, render nothing if both absent.
@@ -2814,11 +2834,11 @@ export default function App() {
                     {divider}
                     {pairBlock("PAIR A",A)}
                     {divider}
-                    {/* Leg scores — single compact line */}
+                    {/* Pair scores — single compact line */}
                     <div style={{fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec8",letterSpacing:"0.04em",marginBottom:8}}>
-                      LEG 1 → <span style={{color:l1.text,fontWeight:700}}>{swap.leg1Score}</span>
+                      Pair 1 → <span style={{color:l1.text,fontWeight:700}}>{swap.leg1Score}</span>
                       <span style={{margin:"0 6px",color:"#3d4d5c"}}>·</span>
-                      LEG 2 ← <span style={{color:l2.text,fontWeight:700}}>{swap.leg2Score}</span>
+                      Pair 2 ← <span style={{color:l2.text,fontWeight:700}}>{swap.leg2Score}</span>
                     </div>
                     {pairBlock("PAIR B",B)}
                     {flags.length>0&&(
