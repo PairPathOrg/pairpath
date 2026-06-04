@@ -414,7 +414,6 @@ function exportChains(chains, allPairs=[]) {
         donorAge: calcAge(d.donor_year_born)??"",
         donorWeight: cleanWeight(d.donor_weight_kg)??"",
         donorHeight: cleanHeight(d.donor_height_cm),
-        donorEgfr: d.donor_egfr||"",
         recipient: step.recipientName||r.recipient_name||step.recipientPairId,
         recipientBlood: step.recipientBlood||r.recipient_blood_type||"",
         recipientAge: calcAge(r.recipient_year_born)??"",
@@ -435,10 +434,10 @@ function exportChains(chains, allPairs=[]) {
   });
   rows.sort((a,b)=>b.chainScore-a.chainScore);
 
-  // Per step: ID, adjacent empty Name column, then clinical columns. (Donor carries eGFR; recipient carries Height + PRA.)
-  const stepHdr = n => [`Step ${n} Donor`,`Step ${n} Donor Name`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Donor Weight (kg)`,`Step ${n} Donor eGFR`,`Step ${n} Recipient`,`Step ${n} Recipient Name`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} Recipient Weight (kg)`,`Step ${n} Recipient Height (cm)`,`Step ${n} PRA%`];
+  // Per step: symmetric columns for both sides — ID, empty Name, Blood Type, Age, Weight, Height (no eGFR).
+  const stepHdr = n => [`Step ${n} Donor`,`Step ${n} Donor Name`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Donor Weight (kg)`,`Step ${n} Donor Height (cm)`,`Step ${n} Recipient`,`Step ${n} Recipient Name`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} Recipient Weight (kg)`,`Step ${n} Recipient Height (cm)`,`Step ${n} Recipient PRA%`];
   const stepCells = st => st
-    ? [st.donor,"",st.donorBlood,st.donorAge,st.donorWeight,st.donorEgfr,st.recipient,"",st.recipientBlood,st.recipientAge,st.recipientWeight,st.recipientHeight,st.pra]
+    ? [st.donor,"",st.donorBlood,st.donorAge,st.donorWeight,st.donorHeight,st.recipient,"",st.recipientBlood,st.recipientAge,st.recipientWeight,st.recipientHeight,st.pra]
     : Array(13).fill("");
 
   const headerCols = ["Chain Score","Chain Length"];
