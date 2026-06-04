@@ -345,53 +345,32 @@ function combinedNotes(...entries){
   return [...hla,...gen].join(" | ");
 }
 
-function exportSwaps(swaps, swapStatuses={}, level="standard") {
-  // Each person: ID column, then an adjacent empty Name column (for VLOOKUP re-identification), then clinical columns.
-  const donorBlock = p => level==="quick"
-    ? [p.donor_name||p.id, "", p.donor_blood_type]
-    : level==="full"
-      ? [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)||"", exportWeight(p.donor_weight_kg), p.donor_height_cm||"", p.donor_egfr||""]
-      : [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)||""];
-  const recipBlock = p => level==="quick"
-    ? [p.recipient_name||p.id, "", p.recipient_blood_type]
-    : level==="full"
-      ? [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)||"", exportWeight(p.recipient_weight_kg), p.recipient_height_cm||"", p.recipient_pra_percent??""]
-      : [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)||"", p.recipient_pra_percent??""];
-  const donorHdr = n => level==="quick"
-    ? [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`]
-    : level==="full"
-      ? [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`,`Pair ${n} Donor eGFR`]
-      : [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`];
-  const recipHdr = n => level==="quick"
-    ? [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`]
-    : level==="full"
-      ? [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} Recipient Weight (kg)`,`Pair ${n} Recipient Height (cm)`,`Pair ${n} PRA%`]
-      : [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} PRA%`];
+function exportSwaps(swaps, swapStatuses={}) {
+  // Each person: ID column, then an adjacent empty Name column (VLOOKUP re-identification), then clinical columns.
+  const donorBlock = p => [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)||"", exportWeight(p.donor_weight_kg), p.donor_height_cm||"", p.donor_egfr||""];
+  const recipBlock = p => [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)||"", exportWeight(p.recipient_weight_kg), p.recipient_height_cm||"", p.recipient_pra_percent??""];
+  const donorHdr = n => [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`,`Pair ${n} Donor eGFR`];
+  const recipHdr = n => [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} Recipient Weight (kg)`,`Pair ${n} Recipient Height (cm)`,`Pair ${n} PRA%`];
   // Per-leg flags, CMV excluded (CMV is removed from all exports).
   const swapFlags = w => [
     ...swapLegFlags(w.pairA, w.pairB, w.leg1, "Leg 1"),
     ...swapLegFlags(w.pairB, w.pairA, w.leg2, "Leg 2"),
   ].filter(f=>!f.includes("CMV")).join("; ")||"None";
 
-  const headerCols = ["Combined Score", ...donorHdr(1), ...recipHdr(1), "Pair 1 Score", ...donorHdr(2), ...recipHdr(2), "Pair 2 Score"];
-  if(level==="full") headerCols.push("Flags","Notes");
-  headerCols.push("Status");
-
+  const headerCols = ["Combined Score", ...donorHdr(1), ...recipHdr(1), "Pair 1 Score", ...donorHdr(2), ...recipHdr(2), "Pair 2 Score", "Flags", "Notes", "Status"];
   const sorted = [...swaps].sort((a,b)=>b.combined-a.combined);
   const lines = sorted.map(w=>{
-    const row=[w.combined, ...donorBlock(w.pairA), ...recipBlock(w.pairA), w.leg1Score, ...donorBlock(w.pairB), ...recipBlock(w.pairB), w.leg2Score];
-    if(level==="full") row.push(swapFlags(w), combinedNotes(w.pairA, w.pairB));
-    row.push(swapStatuses[w.id]||"none");
+    const row=[w.combined, ...donorBlock(w.pairA), ...recipBlock(w.pairA), w.leg1Score, ...donorBlock(w.pairB), ...recipBlock(w.pairB), w.leg2Score, swapFlags(w), combinedNotes(w.pairA, w.pairB), swapStatuses[w.id]||"none"];
     return row.map(csvCell).join(",");
   });
   const header = headerCols.map(csvCell).join(",");
   const blob = new Blob([[exportDisclaimer("PairPath Swap Analysis Export"),header,...lines].join("\n")],{type:"text/csv"});
-  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_swaps_${level}.csv`; a.click();
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_swaps.csv"; a.click();
 }
 
 // Each chain is an array of steps {donorName,donorBlood,donorPairId,recipientName,recipientBlood,recipientPairId,score}.
 // allPairs is used to look up full entry data (age/weight/height/eGFR/PRA/notes) by pair id.
-function exportChains(chains, allPairs=[], level="standard") {
+function exportChains(chains, allPairs=[]) {
   const byId = new Map(allPairs.map(p=>[p.id,p]));
   const MAX_STEPS = 6;
 
@@ -426,30 +405,25 @@ function exportChains(chains, allPairs=[], level="standard") {
   });
   rows.sort((a,b)=>b.chainScore-a.chainScore);
 
-  const stepHdr = n => level==="quick"
-    ? [`Step ${n} Donor`,`Step ${n} Donor Blood Type`,`Step ${n} Recipient`,`Step ${n} Recipient Blood Type`]
-    : level==="full"
-      ? [`Step ${n} Donor`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Donor Weight (kg)`,`Step ${n} Donor Height (cm)`,`Step ${n} Donor eGFR`,`Step ${n} Recipient`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} Recipient Weight (kg)`,`Step ${n} Recipient Height (cm)`,`Step ${n} PRA%`]
-      : [`Step ${n} Donor`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Recipient`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} PRA%`];
-  const stepCells = st => {
-    if(level==="quick") return st?[st.donor,st.donorBlood,st.recipient,st.recipientBlood]:["","","",""];
-    if(level==="full")  return st?[st.donor,st.donorBlood,st.donorAge,st.donorWeight,st.donorHeight,st.donorEgfr,st.recipient,st.recipientBlood,st.recipientAge,st.recipientWeight,st.recipientHeight,st.pra]:Array(12).fill("");
-    return st?[st.donor,st.donorBlood,st.donorAge,st.recipient,st.recipientBlood,st.recipientAge,st.pra]:Array(7).fill("");
-  };
+  // Per step: ID, adjacent empty Name column, then clinical columns. (Donor carries eGFR; recipient carries Height + PRA.)
+  const stepHdr = n => [`Step ${n} Donor`,`Step ${n} Donor Name`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Donor Weight (kg)`,`Step ${n} Donor eGFR`,`Step ${n} Recipient`,`Step ${n} Recipient Name`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} Recipient Weight (kg)`,`Step ${n} Recipient Height (cm)`,`Step ${n} PRA%`];
+  const stepCells = st => st
+    ? [st.donor,"",st.donorBlood,st.donorAge,st.donorWeight,st.donorEgfr,st.recipient,"",st.recipientBlood,st.recipientAge,st.recipientWeight,st.recipientHeight,st.pra]
+    : Array(13).fill("");
 
   const headerCols = ["Chain Score","Chain Length"];
   for(let n=1;n<=MAX_STEPS;n++) headerCols.push(...stepHdr(n));
-  if(level==="full") headerCols.push("Flags","Notes");
+  headerCols.push("Flags","Notes");
 
   const lines = rows.map(row=>{
     const cells=[row.chainScore,row.length];
     for(let n=0;n<MAX_STEPS;n++) cells.push(...stepCells(row.steps[n]));
-    if(level==="full") cells.push(row.flags,row.notes);
+    cells.push(row.flags,row.notes);
     return cells.map(csvCell).join(",");
   });
   const header = headerCols.map(csvCell).join(",");
   const blob = new Blob([[exportDisclaimer("PairPath Chain Export"),header,...lines].join("\n")],{type:"text/csv"});
-  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_chains_${level}.csv`; a.click();
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_chains.csv"; a.click();
 }
 
 // ── Pair Score display helpers ─────────────────────────────────────────────
@@ -674,28 +648,16 @@ function exportRegistry(pairs) {
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_export.csv"; a.click();
 }
 
-function exportMatches(pairs, level="standard") {
+function exportMatches(pairs) {
   const donors    = pairs.filter(p=>p.donor_blood_type&&p.status!=="inactive");
   const recipients= pairs.filter(p=>p.recipient_blood_type&&p.status!=="inactive");
 
-  // Pre-compute waitlist rank across all recipients with a waitlist date
-  const recipientsWithWaitlist = recipients
-    .filter(p=>p.recipient_dialysis_start)
-    .sort((a,b)=>new Date(a.recipient_dialysis_start)-new Date(b.recipient_dialysis_start));
-
-  function waitlistDays(r){
-    if(!r.recipient_dialysis_start) return null;
-    return Math.floor((Date.now()-new Date(r.recipient_dialysis_start))/86400000);
-  }
   function waitlistStr(r){
-    const d=waitlistDays(r);
+    if(!r.recipient_dialysis_start) return "";
+    const d=Math.floor((Date.now()-new Date(r.recipient_dialysis_start))/86400000);
     if(!d) return "";
     if(d>365) return `${Math.floor(d/365)}yr ${Math.floor((d%365)/30)}mo`;
     return `${d} days`;
-  }
-  function waitlistRank(r){
-    const idx=recipientsWithWaitlist.findIndex(p=>p.id===r.id);
-    return idx>=0?`#${idx+1} of ${recipientsWithWaitlist.length}`:""
   }
 
   const rows = [];
@@ -704,57 +666,43 @@ function exportMatches(pairs, level="standard") {
       if(donor.id===recipient.id) return;
       const result = calculateCompatibility(donor, recipient);
       if(!result.reasons.abo) return;
-      const cleanWt = v => { const n=Math.round(parseFloat(String(v||"").replace(/[^\d.]/g,""))); return (!isNaN(n)&&n>0&&n<400)?n:""; };
-      const donorWt  = cleanWt(donor.donor_weight_kg);
-      const recipWt  = cleanWt(recipient.recipient_weight_kg);
+      const donorWt  = exportWeight(donor.donor_weight_kg);
+      const recipWt  = exportWeight(recipient.recipient_weight_kg);
       const waitlist = recipient.recipient_dialysis_start
         ? new Date(recipient.recipient_dialysis_start).toLocaleDateString("en-US",{month:"2-digit",day:"2-digit",year:"numeric"}) : "";
-
-      // Flags — CMV excluded from all exports; size gap + high PRA only.
+      // Flags — CMV excluded; size gap + high PRA only.
       const sizeFlag = donorWt&&recipWt&&Math.abs(donorWt-recipWt)>20?"Size gap":"";
       const praFlag  = parseFloat(recipient.recipient_pra_percent||0)>80?"High PRA":"";
       const flags=[sizeFlag,praFlag].filter(Boolean).join("; ")||"None";
 
       rows.push({
         pair_score:       result.score ?? "ABO only",
-        recipient:        recipient.recipient_name || recipient.id,
-        recipient_blood:  recipient.recipient_blood_type,
-        recipient_age:    calcAge(recipient.recipient_year_born)||"",
-        pra:              recipient.recipient_pra_percent ?? "",
-        waitlist_date:    waitlist,
-        waitlist_duration:waitlistStr(recipient),
-        waitlist_rank:    waitlistRank(recipient),
-        recipient_weight: recipWt,
         donor:            donor.donor_name || donor.id,
         donor_blood:      donor.donor_blood_type,
         donor_age:        calcAge(donor.donor_year_born)||"",
         donor_weight:     donorWt,
         donor_height:     donor.donor_height_cm||"",
-        recipient_height: recipient.recipient_height_cm||"",
-        weight_gap_kg:    donorWt&&recipWt?Math.abs(donorWt-recipWt):"",
-        flags,
         donor_egfr:       donor.donor_egfr||"",
+        recipient:        recipient.recipient_name || recipient.id,
+        recipient_blood:  recipient.recipient_blood_type,
+        recipient_age:    calcAge(recipient.recipient_year_born)||"",
+        recipient_weight: recipWt,
+        recipient_height: recipient.recipient_height_cm||"",
+        pra:              recipient.recipient_pra_percent ?? "",
+        waitlist_date:    waitlist,
+        waitlist_duration:waitlistStr(recipient),
+        flags,
         notes:            combinedNotes(donor, recipient),
       });
     });
   });
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
 
-  // Donor before recipient (left to right). Each person: ID, then an adjacent empty
-  // Name column (for VLOOKUP re-identification), then clinical columns.
-  let header, lines;
-  if(level==="quick"){
-    header = "Pair Score,Donor,Donor Name,Donor Blood Type,Recipient,Recipient Name,Recipient Blood Type,Recipient PRA%";
-    lines  = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.recipient,"",r.recipient_blood,r.pra].map(csvCell).join(","));
-  } else if(level==="full"){
-    header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
-    lines  = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
-  } else {
-    header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient PRA%,Waitlist Date,Waitlist Duration";
-    lines  = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.recipient,"",r.recipient_blood,r.recipient_age,r.pra,r.waitlist_date,r.waitlist_duration].map(csvCell).join(","));
-  }
+  // Each person: ID, then an adjacent empty Name column (VLOOKUP re-identification), then clinical columns.
+  const header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
+  const lines = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
   const blob = new Blob([[exportDisclaimer("PairPath Match Export"),header,...lines].join("\n")],{type:"text/csv"});
-  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`pairpath_matches_${level}.csv`; a.click();
+  const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
 
 function parseCSV(text, userId) {
@@ -1254,7 +1202,6 @@ export default function App() {
   const [xlsxSheets,setXlsxSheets]=useState([]);
   const [xlsxResults,setXlsxResults]=useState([]);
   const [xlsxSummaryVisible,setXlsxSummaryVisible]=useState(false);
-  const [exportModalKind,setExportModalKind]=useState(null); // null | "matches" | "swaps" | "chains"
   const [nameWarning,setNameWarning]=useState(null);
   const [whatIfDonor,setWhatIfDonor]=useState(null);
   const [importHeightUnit,setImportHeightUnit]=useState("meters");
@@ -2228,33 +2175,6 @@ export default function App() {
       )}
 
       {/* Export Matches Detail Level Modal */}
-      {exportModalKind&&(()=>{
-        const cfg={
-          matches:{title:"Export Matches",run:l=>exportMatches(visiblePairs,l)},
-          swaps:{title:"Export Swaps",run:l=>exportSwaps(filteredSwaps,swapStatuses,l)},
-          chains:{title:"Export Chains",run:l=>exportChains(chains,demoMode?DEMO_PAIRS:pairs,l)},
-        }[exportModalKind];
-        return (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-          <div style={{...S.card,maxWidth:480,width:"90%"}}>
-            <div style={{fontFamily:"'DM Sans', sans-serif",fontSize:20,fontWeight:700,color:"#ffffff",marginBottom:6}}>{cfg.title}</div>
-            <p style={{fontSize:13,color:"#b0bec5",marginBottom:20}}>Choose how much detail to include. All versions are sorted by score (highest first).</p>
-            {[
-              {level:"quick",label:"Quick View",desc:"Score · IDs · Blood Types · PRA%"},
-              {level:"standard",label:"Standard",desc:"+ Ages · Waitlist · PRA%"},
-              {level:"full",label:"Full Clinical",desc:"+ Weight · Height · eGFR · Flags · Notes"},
-            ].map(({level,label,desc})=>(
-              <button key={level} onClick={()=>{cfg.run(level);setExportModalKind(null);}}
-                style={{width:"100%",textAlign:"left",padding:"14px 16px",borderRadius:10,border:"1px solid #1e2d3d",background:"#1a2535",cursor:"pointer",marginBottom:8,transition:"all 0.15s"}}>
-                <div style={{fontSize:14,fontWeight:600,color:"#ffffff",marginBottom:3}}>{label}</div>
-                <div style={{fontSize:13,color:"#6ab4d0"}}>{desc}</div>
-              </button>
-            ))}
-            <button onClick={()=>setExportModalKind(null)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5",width:"100%",marginTop:4}}>Cancel</button>
-          </div>
-        </div>
-        );
-      })()}
 
       {/* Duplicate Warning Modal */}
       {duplicateWarning&&(
@@ -2519,7 +2439,7 @@ export default function App() {
                 <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} style={{display:"none"}}/>
               </label>
               <button onClick={()=>exportRegistry(filteredPairs)} style={{...S.btn,background:"transparent",border:"1px solid #2a3d52",color:"#b0bec5"}}>Export CSV</button>
-              <button onClick={()=>setExportModalKind("matches")} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
+              <button onClick={()=>exportMatches(visiblePairs)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export Matches</button>
             </div>
           
 
@@ -2720,8 +2640,8 @@ export default function App() {
               <h1 style={S.pageTitle}>Chain Identification</h1>
               <p style={S.subtitle}>Compatible exchange chains across all active pairs. Chains longer than 6-way are rare in practice and logistically complex to coordinate.</p>
             </div>
-            <button onClick={()=>setExportModalKind("chains")} disabled={!chains.length}
-              style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:chains.length?1:0.5,cursor:chains.length?"pointer":"not-allowed"}}>Export CSV</button>
+            <button onClick={()=>exportChains(chains,demoMode?DEMO_PAIRS:pairs)} disabled={!chains.length}
+              style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:chains.length?1:0.5,cursor:chains.length?"pointer":"not-allowed"}}>Export Chains</button>
           </div>
           {chainsLoading?(
             <div style={{textAlign:"center",padding:60,color:"#4db882",fontFamily:"'DM Mono', monospace",fontSize:13}}>Computing chains…</div>
@@ -2803,8 +2723,8 @@ export default function App() {
                 <option value="scheduled">Scheduled</option>
                 <option value="completed">Completed</option>
               </select>
-              <button onClick={()=>setExportModalKind("swaps")} disabled={!swaps.length}
-                style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:swaps.length?1:0.5,cursor:swaps.length?"pointer":"not-allowed"}}>Export CSV</button>
+              <button onClick={()=>exportSwaps(filteredSwaps,swapStatuses)} disabled={!swaps.length}
+                style={{...S.btn,background:"#1a203a",color:"#6ab4d0",opacity:swaps.length?1:0.5,cursor:swaps.length?"pointer":"not-allowed"}}>Export Swaps</button>
             </div>
           </div>
 
