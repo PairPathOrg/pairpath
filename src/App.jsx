@@ -2717,7 +2717,7 @@ export default function App() {
       {view==="swaps"&&(
         <div style={S.page}>
           <h1 style={S.pageTitle}>Swap Analysis</h1>
-          <p style={S.subtitle}>2-way paired exchanges — both donors cross-donate to each other's recipient.</p>
+          <p style={S.subtitle}>2-way swaps between incompatible pairs — both donors cross-donate to each other's recipient. For direct matches, see the Direct Matches tab.</p>
 
           {/* Stats + controls */}
           <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",marginBottom:20}}>
@@ -3000,7 +3000,7 @@ export default function App() {
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:12}}>
               <div>
                 <h1 style={S.pageTitle}>Best Match Cards</h1>
-                <p style={S.subtitle}>Top compatible donor per recipient · Sorted by score, sensitization, then waitlist time</p>
+                <p style={S.subtitle}>Best available donor per recipient from the full pool — altruistic donors and compatible pairs. Does not include paired exchanges.</p>
               </div>
               <button onClick={()=>exportMatchCards(activePairs)} style={{...S.btn,background:"#1a203a",color:"#6ab4d0"}}>Export PDF</button>
             </div>
