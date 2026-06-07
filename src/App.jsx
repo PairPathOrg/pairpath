@@ -365,9 +365,9 @@ function exportSwaps(swaps, swapStatuses={}) {
   //   Leg 1 = Pair 1 Donor → Pair 2 Recipient (Pair 1 Score), then a ‖ divider,
   //   Leg 2 = Pair 2 Donor → Pair 1 Recipient (Pair 2 Score).
   // Each person: ID, adjacent empty Name column (VLOOKUP), then cleaned clinical columns.
-  const donorCols = p => [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)??"", cleanWeight(p.donor_weight_kg)??"", cleanHeight(p.donor_height_cm), p.donor_egfr||""];
+  const donorCols = p => [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)??"", cleanWeight(p.donor_weight_kg)??"", cleanHeight(p.donor_height_cm)];
   const recipCols = p => [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)??"", cleanWeight(p.recipient_weight_kg)??"", cleanHeight(p.recipient_height_cm), p.recipient_pra_percent??""];
-  const donorHdr = n => [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`,`Pair ${n} Donor eGFR`];
+  const donorHdr = n => [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`];
   const recipHdr = n => [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} Recipient Weight (kg)`,`Pair ${n} Recipient Height (cm)`,`Pair ${n} PRA%`];
   // Per-leg flags labeled Pair 1 / Pair 2, CMV excluded (CMV is removed from all exports).
   const swapFlags = w => [
@@ -399,7 +399,7 @@ function exportSwaps(swaps, swapStatuses={}) {
 }
 
 // Each chain is an array of steps {donorName,donorBlood,donorPairId,recipientName,recipientBlood,recipientPairId,score}.
-// allPairs is used to look up full entry data (age/weight/height/eGFR/PRA/notes) by pair id.
+// allPairs is used to look up full entry data (age/weight/height/PRA/notes) by pair id.
 function exportChains(chains, allPairs=[]) {
   const byId = new Map(allPairs.map(p=>[p.id,p]));
   const MAX_STEPS = 6;
@@ -434,7 +434,7 @@ function exportChains(chains, allPairs=[]) {
   });
   rows.sort((a,b)=>b.chainScore-a.chainScore);
 
-  // Per step: symmetric columns for both sides — ID, empty Name, Blood Type, Age, Weight, Height (no eGFR).
+  // Per step: symmetric columns for both sides — ID, empty Name, Blood Type, Age, Weight, Height.
   const stepHdr = n => [`Step ${n} Donor`,`Step ${n} Donor Name`,`Step ${n} Donor Blood Type`,`Step ${n} Donor Age`,`Step ${n} Donor Weight (kg)`,`Step ${n} Donor Height (cm)`,`Step ${n} Recipient`,`Step ${n} Recipient Name`,`Step ${n} Recipient Blood Type`,`Step ${n} Recipient Age`,`Step ${n} Recipient Weight (kg)`,`Step ${n} Recipient Height (cm)`,`Step ${n} Recipient PRA%`];
   const stepCells = st => st
     ? [st.donor,"",st.donorBlood,st.donorAge,st.donorWeight,st.donorHeight,st.recipient,"",st.recipientBlood,st.recipientAge,st.recipientWeight,st.recipientHeight,st.pra]
@@ -476,7 +476,7 @@ const PAIR_TYPES = [
 ];
 const STATUS_OPTIONS = ["active","matched","surgery_scheduled","completed","withdrawn","on_hold","transferred"];
 const statusLabel = s => s.replace(/_/g," ").replace(/\b\w/g, l => l.toUpperCase());
-const NUMERIC_FIELDS = ["recipient_pra_percent","recipient_weight_kg","recipient_height_cm","donor_weight_kg","donor_height_cm","donor_egfr","recipient_prior_transplants"];
+const NUMERIC_FIELDS = ["recipient_pra_percent","recipient_weight_kg","recipient_height_cm","donor_weight_kg","donor_height_cm","recipient_prior_transplants"];
 const DONOR_PRIORITIES = ["Primary","Secondary","Tertiary"];
 
 // Convert an email domain into a friendly center name, e.g. "sutterhealth.org" → "Sutter Health".
@@ -505,7 +505,7 @@ const emptyForm = {
   donor_name:"", donor_blood_type:"A", donor_weight_kg:"", donor_height_cm:"",
   donor_year_born:"", donor_hla_a1:"", donor_hla_a2:"", donor_hla_b1:"", donor_hla_b2:"",
   donor_hla_dr1:"", donor_hla_dr2:"", donor_hla_notes:"",
-  donor_egfr:"", donor_cmv:"Unknown", donor_backup:false, donor_zip:"",
+  donor_cmv:"Unknown", donor_backup:false, donor_zip:"",
   donor_priority:"Primary",
   status:"active", notes:"", centre:"",
 };
@@ -629,7 +629,7 @@ function exportMatchCards(pairs) {
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <div>
               <span style="font-size:14px;font-weight:600;color:#222">${best.donor.donor_name||"—"}</span>
-              <span style="font-size:12px;color:#666;margin-left:8px">· ${best.donor.donor_blood_type||"?"}${best.donor.donor_egfr?` · eGFR ${best.donor.donor_egfr}`:""}${weightDiff!=null?` · ${weightDiff}kg size diff`:""}</span>
+              <span style="font-size:12px;color:#666;margin-left:8px">· ${best.donor.donor_blood_type||"?"}${weightDiff!=null?` · ${weightDiff}kg size diff`:""}</span>
             </div>
             ${matches.length>1?`<span style="font-size:11px;color:#888">+${matches.length-1} other compatible donor${matches.length>2?"s":""}</span>`:""}
           </div>
@@ -658,7 +658,7 @@ function exportRegistry(pairs) {
   const UNIT_LABELS = {
     recipient_weight_kg:"recipient_weight_kg",donor_weight_kg:"donor_weight_kg",
     recipient_height_cm:"recipient_height_cm",donor_height_cm:"donor_height_cm",
-    donor_egfr:"donor_egfr_ml_min",recipient_pra_percent:"recipient_pra_percent",
+    recipient_pra_percent:"recipient_pra_percent",
   };
   const keys = Object.keys(pairs[0]).filter(k=>!["id","user_id"].includes(k));
   const labeledKeys = keys.map(k=>UNIT_LABELS[k]||k);
@@ -701,7 +701,6 @@ function exportMatches(pairs) {
         donor_age:        calcAge(donor.donor_year_born)??"",
         donor_weight:     donorWt??"",
         donor_height:     cleanHeight(donor.donor_height_cm),
-        donor_egfr:       donor.donor_egfr||"",
         recipient:        recipient.recipient_name || recipient.id,
         recipient_blood:  recipient.recipient_blood_type,
         recipient_age:    calcAge(recipient.recipient_year_born)??"",
@@ -718,8 +717,8 @@ function exportMatches(pairs) {
   rows.sort((a,b)=>(b.pair_score==="ABO only"?0:b.pair_score)-(a.pair_score==="ABO only"?0:a.pair_score));
 
   // Each person: ID, then an adjacent empty Name column (VLOOKUP re-identification), then clinical columns.
-  const header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Donor eGFR,Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
-  const lines = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.donor_egfr,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
+  const header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
+  const lines = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
   const blob = new Blob([[exportDisclaimer("PairPath Match Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
@@ -763,7 +762,6 @@ const PAIRPATH_FIELDS = [
   {key:"donor_year_born",label:"Donor Year Born",required:false,types:["paired","altruistic"]},
   {key:"donor_weight_kg",label:"Donor Weight (kg)",required:true,types:["paired","altruistic"]},
   {key:"donor_height_cm",label:"Donor Height (cm)",required:true,types:["paired","altruistic"]},
-  {key:"donor_egfr",label:"Donor eGFR",required:false,types:["paired","altruistic"]},
   {key:"donor_cmv",label:"Donor CMV",required:false,types:["paired","altruistic"]},
   {key:"donor_hla_notes",label:"Donor HLA Notes",required:false,types:["paired","altruistic"]},
   {key:"donor_zip",label:"Donor ZIP",required:false,types:["paired","altruistic"]},
@@ -790,36 +788,58 @@ function autoDetect(headers, pairType="paired") {
   const isDonorOnly = pairType === "altruistic";
   const isRecipOnly = pairType === "recipient_only";
 
+  // LD/R prefix detection for Epic exports — runs BEFORE the generic rules so a
+  // column like "LD Patient Name" can never be grabbed by the generic
+  // "patient name" → recipient_name rule. "LD ..." = living donor (DONOR fields),
+  // "R ..." = recipient. raw is the lowercased header with spaces preserved.
+  function ldrField(raw){
+    const isLD = raw.includes("ld");
+    const isR  = !isLD && raw.startsWith("r ");
+    if(!isLD && !isR) return null;
+    const side = isLD ? "donor" : "recipient";
+    if(side==="donor" && isRecipOnly) return null;
+    if(side==="recipient" && isDonorOnly) return null;
+    const has = kw => raw.includes(kw);
+    if(has("name"))                        return side==="donor"?"donor_name":"recipient_name";
+    if(has("dob")||has("year")||has("birth")) return side==="donor"?"donor_year_born":"recipient_year_born";
+    if(has("abo")||has("blood"))           return side==="donor"?"donor_blood_type":"recipient_blood_type";
+    if(has("weight"))                      return side==="donor"?"donor_weight_kg":"recipient_weight_kg";
+    if(has("height"))                      return side==="donor"?"donor_height_cm":"recipient_height_cm";
+    if(has("hla"))                         return side==="donor"?"donor_hla_notes":"recipient_hla_notes";
+    if(has("pra"))                         return side==="recipient"?"recipient_pra_percent":null;
+    if(has("cmv"))                         return side==="donor"?"donor_cmv":"recipient_cmv";
+    return null;
+  }
+
   const rules = [
     // Recipient fields — skip if altruistic-only upload
     ...(!isDonorOnly?[
-      {keys:["recipient_name","patient_name","pt_name","r_patient_name"],field:"recipient_name"},
+      {keys:["recipient_name","patient_name","pt_name"],field:"recipient_name"},
       {keys:["recipient_first","recip_first","patient_first","pt_first","first_name","firstname","r_first"],field:"_recip_first"},
       {keys:["recipient_last","recip_last","patient_last","pt_last","last_name","lastname","surname","r_last"],field:"_recip_last"},
-      {keys:["recipient_blood_type","recipient_abo","r_abo"],field:"recipient_blood_type"},
+      {keys:["recipient_blood_type","recipient_abo"],field:"recipient_blood_type"},
       {keys:["recipient_pra","pra","pra_percent","pra %"],field:"recipient_pra_percent"},
-      {keys:["recipient_weight","weight_kg","r_weight"],field:"recipient_weight_kg"},
-      {keys:["recipient_height","height_cm","r_height"],field:"recipient_height_cm"},
-      {keys:["recipient_dob","dob","date_of_birth","birth_date","r_year","r_dob"],field:"recipient_year_born"},
+      {keys:["recipient_weight","weight_kg"],field:"recipient_weight_kg"},
+      {keys:["recipient_height","height_cm"],field:"recipient_height_cm"},
+      {keys:["recipient_dob","dob","date_of_birth","birth_date"],field:"recipient_year_born"},
       {keys:["recipient_cmv"],field:"recipient_cmv"},
       {keys:["recipient_hla","hla_notes"],field:"recipient_hla_notes"},
       {keys:["dialysis_start","dialysis start","unos","listing_date","waitlist_date"],field:"recipient_dialysis_start"},
     ]:[]),
     // Donor fields — skip if recipient-only upload
     ...(!isRecipOnly?[
-      {keys:["donor_name","living_donor","ld_patient_name"],field:"donor_name"},
+      {keys:["donor_name","living_donor"],field:"donor_name"},
       {keys:["donor_first","ld_first","living_donor_first","d_first"],field:"_donor_first"},
       {keys:["donor_last","ld_last","living_donor_last","d_last"],field:"_donor_last"},
-      {keys:["donor_blood_type","donor_abo","ld_abo"],field:"donor_blood_type"},
-      {keys:["donor_egfr","egfr","gfr"],field:"donor_egfr"},
-      {keys:["donor_weight","ld_weight"],field:"donor_weight_kg"},
-      {keys:["donor_height","ld_height"],field:"donor_height_cm"},
+      {keys:["donor_blood_type","donor_abo"],field:"donor_blood_type"},
+      {keys:["donor_weight"],field:"donor_weight_kg"},
+      {keys:["donor_height"],field:"donor_height_cm"},
       {keys:["donor_cmv"],field:"donor_cmv"},
-      {keys:["donor_dob","ld_year","ld_dob"],field:"donor_year_born"},
+      {keys:["donor_hla"],field:"donor_hla_notes"},
+      {keys:["donor_dob"],field:"donor_year_born"},
     ]:[]),
     // Generic fields that could be either — map based on pairType
-    {keys:["name","patient name","full name","pt name","ld patient name","ld name","living donor name"],field:isDonorOnly?"donor_name":"recipient_name"},
-    {keys:["r patient name","recipient patient name","r name","waitlist patient name"],field:"recipient_name"},
+    {keys:["name","patient name","full name","pt name"],field:isDonorOnly?"donor_name":"recipient_name"},
     {keys:["abo","blood_type","blood type","abo type","blood group"],field:isDonorOnly?"donor_blood_type":"recipient_blood_type"},
     {keys:["weight"],field:isDonorOnly?"donor_weight_kg":"recipient_weight_kg"},
     {keys:["height"],field:isDonorOnly?"donor_height_cm":"recipient_height_cm"},
@@ -830,7 +850,12 @@ function autoDetect(headers, pairType="paired") {
     {keys:["centre","center","hospital","program"],field:"centre"},
   ];
   headers.forEach(h => {
-    const hl = h.toLowerCase().replace(/\s+/g,"_");
+    const raw = h.toLowerCase().trim();
+    // 1) LD/R prefix detection takes priority over the generic substring rules.
+    const ldr = ldrField(raw);
+    if(ldr && !Object.values(mapping).includes(ldr)){ mapping[h] = ldr; return; }
+    // 2) Fall back to generic rules (Epic donor_*/recipient_* and plain headers).
+    const hl = raw.replace(/\s+/g,"_");
     for (const rule of rules) {
       if (rule.keys.some(k => hl.includes(k) || k.includes(hl))) {
         if (!Object.values(mapping).includes(rule.field)) { mapping[h] = rule.field; break; }
@@ -1182,19 +1207,19 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
 
 // ── Demo Data ──────────────────────────────────────────────────────────────
 const DEMO_PAIRS = [
-  {id:"d1",pair_type:"paired",status:"active",recipient_name:"R1",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"D1",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",donor_egfr:72,centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
+  {id:"d1",pair_type:"paired",status:"active",recipient_name:"R1",recipient_blood_type:"B",recipient_pra_percent:85,recipient_weight_kg:58,recipient_year_born:"1968",donor_name:"D1",donor_blood_type:"A",donor_weight_kg:82,donor_year_born:"1966",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*2).toISOString(),user_id:"demo"},
   {id:"d2",pair_type:"paired",status:"active",recipient_name:"R2",recipient_blood_type:"O",recipient_pra_percent:92,recipient_weight_kg:74,recipient_year_born:"1972",donor_name:"D2",donor_blood_type:"A",donor_weight_kg:68,donor_year_born:"1974",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*5).toISOString(),user_id:"demo"},
-  {id:"d3",pair_type:"paired",status:"active",recipient_name:"R3",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"D3",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",donor_egfr:88,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
-  {id:"d4",pair_type:"altruistic",status:"active",donor_name:"D4",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_egfr:95,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
-  {id:"d5",pair_type:"paired",status:"active",recipient_name:"R4",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"D5",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",donor_egfr:91,centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
+  {id:"d3",pair_type:"paired",status:"active",recipient_name:"R3",recipient_blood_type:"A",recipient_pra_percent:30,recipient_weight_kg:54,recipient_year_born:"1980",donor_name:"D3",donor_blood_type:"B",donor_weight_kg:79,donor_year_born:"1978",centre:"Stanford Health",created_at:new Date(Date.now()-86400000*8).toISOString(),user_id:"demo"},
+  {id:"d4",pair_type:"altruistic",status:"active",donor_name:"D4",donor_blood_type:"O",donor_weight_kg:77,donor_year_born:"1975",donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*10).toISOString(),user_id:"demo"},
+  {id:"d5",pair_type:"paired",status:"active",recipient_name:"R4",recipient_blood_type:"AB",recipient_pra_percent:15,recipient_weight_kg:61,recipient_year_born:"1985",donor_name:"D5",donor_blood_type:"O",donor_weight_kg:88,donor_year_born:"1983",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*12).toISOString(),user_id:"demo"},
   {id:"d6",pair_type:"recipient_only",status:"active",recipient_name:"R5",recipient_blood_type:"O",recipient_pra_percent:98,recipient_weight_kg:52,recipient_year_born:"1965",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*14).toISOString(),user_id:"demo"},
-  {id:"d7",pair_type:"paired",status:"active",recipient_name:"R6",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"D6",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",donor_egfr:82,centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
+  {id:"d7",pair_type:"paired",status:"active",recipient_name:"R6",recipient_blood_type:"A",recipient_pra_percent:10,recipient_weight_kg:83,recipient_year_born:"1990",donor_name:"D6",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1988",centre:"Stanford Health",created_at:new Date(Date.now()-86400000*18).toISOString(),user_id:"demo"},
   {id:"d8",pair_type:"paired",status:"matched",recipient_name:"R7",recipient_blood_type:"B",recipient_pra_percent:45,recipient_weight_kg:57,recipient_year_born:"1970",donor_name:"D7",donor_blood_type:"O",donor_weight_kg:81,donor_year_born:"1968",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*20).toISOString(),user_id:"demo"},
   // Paired entries tuned to form clean 2-way swaps in demo mode (D/R IDs only — anonymized).
-  {id:"d9",pair_type:"paired",status:"active",recipient_name:"R8",recipient_blood_type:"A",recipient_pra_percent:62,recipient_weight_kg:55,recipient_year_born:"1976",recipient_cmv:"Negative",donor_name:"D8",donor_blood_type:"B",donor_weight_kg:78,donor_year_born:"1974",donor_egfr:84,donor_cmv:"Positive",centre:"Stanford Health",created_at:new Date(Date.now()-86400000*22).toISOString(),user_id:"demo"},
-  {id:"d10",pair_type:"paired",status:"active",recipient_name:"R9",recipient_blood_type:"B",recipient_pra_percent:18,recipient_weight_kg:71,recipient_year_born:"1982",recipient_cmv:"Positive",donor_name:"D9",donor_blood_type:"A",donor_weight_kg:74,donor_year_born:"1980",donor_egfr:90,donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*24).toISOString(),user_id:"demo"},
-  {id:"d11",pair_type:"paired",status:"active",recipient_name:"R10",recipient_blood_type:"O",recipient_pra_percent:88,recipient_weight_kg:60,recipient_year_born:"1969",recipient_cmv:"Negative",donor_name:"D10",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1971",donor_egfr:79,donor_cmv:"Positive",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*26).toISOString(),user_id:"demo"},
-  {id:"d12",pair_type:"paired",status:"active",recipient_name:"R11",recipient_blood_type:"A",recipient_pra_percent:40,recipient_weight_kg:95,recipient_year_born:"1987",recipient_cmv:"Negative",donor_name:"D11",donor_blood_type:"O",donor_weight_kg:70,donor_year_born:"1985",donor_egfr:93,donor_cmv:"Negative",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*28).toISOString(),user_id:"demo"},
+  {id:"d9",pair_type:"paired",status:"active",recipient_name:"R8",recipient_blood_type:"A",recipient_pra_percent:62,recipient_weight_kg:55,recipient_year_born:"1976",recipient_cmv:"Negative",donor_name:"D8",donor_blood_type:"B",donor_weight_kg:78,donor_year_born:"1974",donor_cmv:"Positive",centre:"Stanford Health",created_at:new Date(Date.now()-86400000*22).toISOString(),user_id:"demo"},
+  {id:"d10",pair_type:"paired",status:"active",recipient_name:"R9",recipient_blood_type:"B",recipient_pra_percent:18,recipient_weight_kg:71,recipient_year_born:"1982",recipient_cmv:"Positive",donor_name:"D9",donor_blood_type:"A",donor_weight_kg:74,donor_year_born:"1980",donor_cmv:"Negative",centre:"Sutter CPMC",created_at:new Date(Date.now()-86400000*24).toISOString(),user_id:"demo"},
+  {id:"d11",pair_type:"paired",status:"active",recipient_name:"R10",recipient_blood_type:"O",recipient_pra_percent:88,recipient_weight_kg:60,recipient_year_born:"1969",recipient_cmv:"Negative",donor_name:"D10",donor_blood_type:"A",donor_weight_kg:65,donor_year_born:"1971",donor_cmv:"Positive",centre:"UCSF Medical Center",created_at:new Date(Date.now()-86400000*26).toISOString(),user_id:"demo"},
+  {id:"d12",pair_type:"paired",status:"active",recipient_name:"R11",recipient_blood_type:"A",recipient_pra_percent:40,recipient_weight_kg:95,recipient_year_born:"1987",recipient_cmv:"Negative",donor_name:"D11",donor_blood_type:"O",donor_weight_kg:70,donor_year_born:"1985",donor_cmv:"Negative",centre:"Kaiser Oakland",created_at:new Date(Date.now()-86400000*28).toISOString(),user_id:"demo"},
 ];
 
 // ── Main App ───────────────────────────────────────────────────────────────
@@ -1807,7 +1832,7 @@ export default function App() {
   function cleanImportRow(obj, importHeightUnit="meters", importWeightUnit="kg") {
     // Strip unit characters from numeric fields — handles "75kg", "75 kg", "1.9m", "180 cm", "165 lbs"
     ["recipient_height_cm","donor_height_cm","recipient_weight_kg","donor_weight_kg",
-     "donor_egfr","recipient_pra_percent","recipient_prior_transplants"].forEach(k=>{
+     "recipient_pra_percent","recipient_prior_transplants"].forEach(k=>{
       if(obj[k]!=null) obj[k]=String(obj[k]).replace(/[^\d.]/g,"").trim()||null;
     });
     NUMERIC_FIELDS.forEach(k=>{if(obj[k]===""||obj[k]===undefined)obj[k]=null;});
@@ -2584,7 +2609,6 @@ export default function App() {
                         Donor: <strong style={{color:"#c8d4dc"}}>{pair.donor_name}</strong>
                         {pair.donor_blood_type?` · ${pair.donor_blood_type}`:""}
                         {dAge?` · Age ${dAge}`:""}
-                        {pair.donor_egfr?` · eGFR ${pair.donor_egfr}`:""}
                       </div>
                     )}
                     {/* Sibling donors for same recipient */}
@@ -3075,7 +3099,6 @@ export default function App() {
                           <span style={{fontSize:13,fontWeight:600,color:"#4db882"}}>{best.donor.donor_name}</span>
                           <span style={S.tag("#3d5060")}>{best.donor.donor_blood_type}</span>
                           {dAge&&<span style={{fontSize:13,color:"#c4d0d9"}}>Age {dAge}</span>}
-                          {best.donor.donor_egfr&&<span style={{fontSize:13,color:"#c4d0d9"}}>eGFR {best.donor.donor_egfr}</span>}
                           {(()=>{
                             const dw=cleanWeight(best.donor.donor_weight_kg);
                             const rw=cleanWeight(recip.recipient_weight_kg);
@@ -3156,13 +3179,6 @@ export default function App() {
           if(v===''||v===undefined||v===null) return null;
           const n=parseFloat(v);
           if(n<0||n>100) return "⚠ PRA must be 0–100%";
-          return null;
-        };
-        const egfrWarn = v => {
-          if(!v) return null;
-          const n=parseFloat(v);
-          if(n<5)  return "⚠ eGFR seems very low — verify";
-          if(n>150) return "⚠ eGFR seems high — verify";
           return null;
         };
         const yearWarn = v => {
@@ -3292,10 +3308,6 @@ export default function App() {
                       {yearWarn(form.donor_year_born)&&<div style={{fontSize:13,color:"#ffd166",marginTop:3}}>{yearWarn(form.donor_year_born)}</div>}
                     </div>
                   </div>
-                  <div>
-                    <Field label="eGFR (mL/min)" type="number" value={form.donor_egfr} onChange={v=>setForm(f=>({...f,donor_egfr:v}))}/>
-                    {egfrWarn(form.donor_egfr)&&<div style={{fontSize:13,color:"#ffd166",marginTop:3}}>{egfrWarn(form.donor_egfr)}</div>}
-                  </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                     <div>
                       <Field label={`Weight (${wLabel})`} type="number" value={displayWeight("donor_weight_kg")} onChange={v=>setWeight("donor_weight_kg",v)}/>
@@ -3422,7 +3434,6 @@ export default function App() {
                 {label:"Size Compatibility",value:result.reasons.sizeMatch?"Acceptable":"Flag",ok:result.reasons.sizeMatch,detail:`Donor ${donor.donor_weight_kg||"?"}kg → Recipient ${recipient.recipient_weight_kg||"?"}kg · >20kg gap flagged`},
                 {label:"CMV Risk",value:result.reasons.cmvRisk?"D+/R− Risk":"Acceptable",ok:!result.reasons.cmvRisk,detail:`Donor ${donor.donor_cmv||"?"} / Recipient ${recipient.recipient_cmv||"?"} · D+/R− increases recipient risk`},
                 {label:"Age Gap",value:dAge&&rAge?`${result.reasons.ageDiff} yrs`:"Unknown",ok:!result.reasons.ageFlag,detail:`Donor ${dAge||"?"}y · Recipient ${rAge||"?"}y · >15yr gap flagged`},
-                {label:"Donor eGFR",value:donor.donor_egfr?`${donor.donor_egfr} mL/min`:"Not recorded",ok:(donor.donor_egfr||0)>=60,detail:(donor.donor_egfr||0)>=60?"Adequate renal function":"Below 60 — review required"},
                 {label:"Virtual Crossmatch",value:recipient.recipient_crossmatch_virtual||"Not recorded",ok:recipient.recipient_crossmatch_virtual==="Negative",detail:"Negative = no known antibody conflict · overrides score if available"},
               ].map(({label,value,ok,warn,detail})=>(
                 <div key={label} style={{...S.card,borderColor:ok?"#1a3028":warn?"#2a2010":"#2a1010"}}>
