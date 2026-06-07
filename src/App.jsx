@@ -339,6 +339,21 @@ function exportDisclaimer(title){
 const csvCell = v => { const s=String(v??""); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
 // Cleaned cm height; "" when not parseable. (Weights run through cleanWeight; ages through calcAge.)
 const cleanHeight = v => { const n=Math.round(parseFloat(v)); return Number.isFinite(n)?n:""; };
+// Age for exports — guards against Excel serial years (>3000) leaking through and
+// never emits NaN/null (blank string instead). Reference year fixed at 2025.
+function exportAge(x){
+  if(x===null||x===undefined||x==="") return "";
+  let year = parseInt(x);
+  if(parseFloat(x) > 3000) year = Math.floor(new Date((parseFloat(x)-25569)*86400000).getUTCFullYear());
+  const age = 2025 - year;
+  return Number.isFinite(age) ? age : "";
+}
+// Year-born for direct export writes — converts a leaked Excel serial (>3000) to a 4-digit year.
+function cleanYearBorn(x){
+  if(x===null||x===undefined||x==="") return x;
+  if(parseFloat(x) > 3000) return Math.floor(new Date((parseFloat(x)-25569)*86400000).getUTCFullYear());
+  return x;
+}
 // "Excel Table" tip rows appended (after the scoring explanation) to matches and swaps CSVs.
 const EXPORT_TIP_ROWS = [
   "TIP: Turn this into an Excel Table for easy filtering",
@@ -365,8 +380,8 @@ function exportSwaps(swaps, swapStatuses={}) {
   //   Leg 1 = Pair 1 Donor → Pair 2 Recipient (Pair 1 Score), then a ‖ divider,
   //   Leg 2 = Pair 2 Donor → Pair 1 Recipient (Pair 2 Score).
   // Each person: ID, adjacent empty Name column (VLOOKUP), then cleaned clinical columns.
-  const donorCols = p => [p.donor_name||p.id, "", p.donor_blood_type, calcAge(p.donor_year_born)??"", cleanWeight(p.donor_weight_kg)??"", cleanHeight(p.donor_height_cm)];
-  const recipCols = p => [p.recipient_name||p.id, "", p.recipient_blood_type, calcAge(p.recipient_year_born)??"", cleanWeight(p.recipient_weight_kg)??"", cleanHeight(p.recipient_height_cm), p.recipient_pra_percent??""];
+  const donorCols = p => [p.donor_name||p.id, "", p.donor_blood_type, exportAge(p.donor_year_born), cleanWeight(p.donor_weight_kg)??"", cleanHeight(p.donor_height_cm)];
+  const recipCols = p => [p.recipient_name||p.id, "", p.recipient_blood_type, exportAge(p.recipient_year_born), cleanWeight(p.recipient_weight_kg)??"", cleanHeight(p.recipient_height_cm), p.recipient_pra_percent??""];
   const donorHdr = n => [`Pair ${n} Donor`,`Pair ${n} Donor Name`,`Pair ${n} Donor Blood Type`,`Pair ${n} Donor Age`,`Pair ${n} Donor Weight (kg)`,`Pair ${n} Donor Height (cm)`];
   const recipHdr = n => [`Pair ${n} Recipient`,`Pair ${n} Recipient Name`,`Pair ${n} Recipient Blood Type`,`Pair ${n} Recipient Age`,`Pair ${n} Recipient Weight (kg)`,`Pair ${n} Recipient Height (cm)`,`Pair ${n} PRA%`];
   // Per-leg flags labeled Pair 1 / Pair 2, CMV excluded (CMV is removed from all exports).
@@ -377,24 +392,22 @@ function exportSwaps(swaps, swapStatuses={}) {
 
   const headerCols = [
     "Combined Score",
-    ...donorHdr(1), "gives to →", ...recipHdr(2), "Pair 1 Score",
-    "‖",
-    ...donorHdr(2), "gives to →", ...recipHdr(1), "Pair 2 Score",
+    ...donorHdr(1), ...recipHdr(2), "Pair 1 Score",
+    ...donorHdr(2), ...recipHdr(1), "Pair 2 Score",
     "Flags","Notes","Status",
   ];
   const sorted = [...swaps].sort((a,b)=>b.combined-a.combined);
   const lines = sorted.map(w=>{
     const row=[
       w.combined,
-      ...donorCols(w.pairA), "→", ...recipCols(w.pairB), w.leg1Score,
-      "‖",
-      ...donorCols(w.pairB), "→", ...recipCols(w.pairA), w.leg2Score,
+      ...donorCols(w.pairA), ...recipCols(w.pairB), w.leg1Score,
+      ...donorCols(w.pairB), ...recipCols(w.pairA), w.leg2Score,
       swapFlags(w), combinedNotes(w.pairA, w.pairB), swapStatuses[w.id]||"none",
     ];
     return row.map(csvCell).join(",");
   });
   const header = headerCols.map(csvCell).join(",");
-  const blob = new Blob([[exportDisclaimer("PairPath Swap Analysis Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv"});
+  const blob = new Blob(['\uFEFF'+[exportDisclaimer("PairPath Swap Analysis Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv;charset=utf-8"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_swaps.csv"; a.click();
 }
 
@@ -411,12 +424,12 @@ function exportChains(chains, allPairs=[]) {
       return {
         donor: step.donorName||d.donor_name||step.donorPairId,
         donorBlood: step.donorBlood||d.donor_blood_type||"",
-        donorAge: calcAge(d.donor_year_born)??"",
+        donorAge: exportAge(d.donor_year_born),
         donorWeight: cleanWeight(d.donor_weight_kg)??"",
         donorHeight: cleanHeight(d.donor_height_cm),
         recipient: step.recipientName||r.recipient_name||step.recipientPairId,
         recipientBlood: step.recipientBlood||r.recipient_blood_type||"",
-        recipientAge: calcAge(r.recipient_year_born)??"",
+        recipientAge: exportAge(r.recipient_year_born),
         recipientWeight: cleanWeight(r.recipient_weight_kg)??"",
         recipientHeight: cleanHeight(r.recipient_height_cm),
         pra: r.recipient_pra_percent??"",
@@ -451,7 +464,7 @@ function exportChains(chains, allPairs=[]) {
     return cells.map(csvCell).join(",");
   });
   const header = headerCols.map(csvCell).join(",");
-  const blob = new Blob([[exportDisclaimer("PairPath Chain Export"),header,...lines].join("\n")],{type:"text/csv"});
+  const blob = new Blob(['\uFEFF'+[exportDisclaimer("PairPath Chain Export"),header,...lines].join("\n")],{type:"text/csv;charset=utf-8"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_chains.csv"; a.click();
 }
 
@@ -662,8 +675,8 @@ function exportRegistry(pairs) {
   };
   const keys = Object.keys(pairs[0]).filter(k=>!["id","user_id"].includes(k));
   const labeledKeys = keys.map(k=>UNIT_LABELS[k]||k);
-  const rows = pairs.map(p=>keys.map(k=>{const v=p[k];return typeof v==="string"&&v.includes(",")?`"${v}"`:(v??'');}).join(","));
-  const blob = new Blob([[labeledKeys.join(","),...rows].join("\n")],{type:"text/csv"});
+  const rows = pairs.map(p=>keys.map(k=>{let v=p[k];if(k.endsWith("year_born"))v=cleanYearBorn(v);return typeof v==="string"&&v.includes(",")?`"${v}"`:(v??'');}).join(","));
+  const blob = new Blob(['\uFEFF'+[labeledKeys.join(","),...rows].join("\n")],{type:"text/csv;charset=utf-8"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_export.csv"; a.click();
 }
 
@@ -698,12 +711,12 @@ function exportMatches(pairs) {
         pair_score:       result.score ?? "ABO only",
         donor:            donor.donor_name || donor.id,
         donor_blood:      donor.donor_blood_type,
-        donor_age:        calcAge(donor.donor_year_born)??"",
+        donor_age:        exportAge(donor.donor_year_born),
         donor_weight:     donorWt??"",
         donor_height:     cleanHeight(donor.donor_height_cm),
         recipient:        recipient.recipient_name || recipient.id,
         recipient_blood:  recipient.recipient_blood_type,
-        recipient_age:    calcAge(recipient.recipient_year_born)??"",
+        recipient_age:    exportAge(recipient.recipient_year_born),
         recipient_weight: recipWt??"",
         recipient_height: cleanHeight(recipient.recipient_height_cm),
         pra:              recipient.recipient_pra_percent ?? "",
@@ -719,7 +732,7 @@ function exportMatches(pairs) {
   // Each person: ID, then an adjacent empty Name column (VLOOKUP re-identification), then clinical columns.
   const header = "Pair Score,Donor,Donor Name,Donor Blood Type,Donor Age,Donor Weight (kg),Donor Height (cm),Recipient,Recipient Name,Recipient Blood Type,Recipient Age,Recipient Weight (kg),Recipient Height (cm),Recipient PRA%,Waitlist Date,Waitlist Duration,Flags,Notes";
   const lines = rows.map(r=>[r.pair_score,r.donor,"",r.donor_blood,r.donor_age,r.donor_weight,r.donor_height,r.recipient,"",r.recipient_blood,r.recipient_age,r.recipient_weight,r.recipient_height,r.pra,r.waitlist_date,r.waitlist_duration,r.flags,r.notes].map(csvCell).join(","));
-  const blob = new Blob([[exportDisclaimer("PairPath Match Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv"});
+  const blob = new Blob(['\uFEFF'+[exportDisclaimer("PairPath Match Export"),EXPORT_TIP_ROWS,header,...lines].join("\n")],{type:"text/csv;charset=utf-8"});
   const a = document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="pairpath_matches.csv"; a.click();
 }
 
