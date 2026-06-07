@@ -771,6 +771,20 @@ const PAIRPATH_FIELDS = [
   {key:"centre",label:"Centre",required:false,types:["paired","altruistic","recipient_only"]},
 ];
 
+// Pre-convert Excel serial dates to ISO strings — used for both data rows and
+// the first-row preview so the mapper never shows raw serials like 25646.
+// Range covers Excel date serials roughly 1940–2100.
+function preConvertSerials(val){
+  if(!val&&val!==0) return val;
+  const s=String(val).trim();
+  const n=parseFloat(s);
+  if(!isNaN(n)&&n>14000&&n<80000&&Number.isInteger(n)&&!s.includes("/")){
+    const date=new Date((n-25569)*86400000);
+    return date.toISOString().split("T")[0];
+  }
+  return val;
+}
+
 function autoDetect(headers, pairType="paired") {
   const mapping = {};
   const isDonorOnly = pairType === "altruistic";
@@ -779,29 +793,29 @@ function autoDetect(headers, pairType="paired") {
   const rules = [
     // Recipient fields — skip if altruistic-only upload
     ...(!isDonorOnly?[
-      {keys:["recipient_name","patient_name","pt_name"],field:"recipient_name"},
+      {keys:["recipient_name","patient_name","pt_name","r_patient_name"],field:"recipient_name"},
       {keys:["recipient_first","recip_first","patient_first","pt_first","first_name","firstname","r_first"],field:"_recip_first"},
       {keys:["recipient_last","recip_last","patient_last","pt_last","last_name","lastname","surname","r_last"],field:"_recip_last"},
-      {keys:["recipient_blood_type","recipient_abo"],field:"recipient_blood_type"},
+      {keys:["recipient_blood_type","recipient_abo","r_abo"],field:"recipient_blood_type"},
       {keys:["recipient_pra","pra","pra_percent","pra %"],field:"recipient_pra_percent"},
-      {keys:["recipient_weight","weight_kg"],field:"recipient_weight_kg"},
-      {keys:["recipient_height","height_cm"],field:"recipient_height_cm"},
-      {keys:["recipient_dob","dob","date_of_birth","birth_date"],field:"recipient_year_born"},
+      {keys:["recipient_weight","weight_kg","r_weight"],field:"recipient_weight_kg"},
+      {keys:["recipient_height","height_cm","r_height"],field:"recipient_height_cm"},
+      {keys:["recipient_dob","dob","date_of_birth","birth_date","r_year","r_dob"],field:"recipient_year_born"},
       {keys:["recipient_cmv"],field:"recipient_cmv"},
       {keys:["recipient_hla","hla_notes"],field:"recipient_hla_notes"},
       {keys:["dialysis_start","dialysis start","unos","listing_date","waitlist_date"],field:"recipient_dialysis_start"},
     ]:[]),
     // Donor fields — skip if recipient-only upload
     ...(!isRecipOnly?[
-      {keys:["donor_name","living_donor"],field:"donor_name"},
+      {keys:["donor_name","living_donor","ld_patient_name"],field:"donor_name"},
       {keys:["donor_first","ld_first","living_donor_first","d_first"],field:"_donor_first"},
       {keys:["donor_last","ld_last","living_donor_last","d_last"],field:"_donor_last"},
-      {keys:["donor_blood_type","donor_abo"],field:"donor_blood_type"},
+      {keys:["donor_blood_type","donor_abo","ld_abo"],field:"donor_blood_type"},
       {keys:["donor_egfr","egfr","gfr"],field:"donor_egfr"},
-      {keys:["donor_weight"],field:"donor_weight_kg"},
-      {keys:["donor_height"],field:"donor_height_cm"},
+      {keys:["donor_weight","ld_weight"],field:"donor_weight_kg"},
+      {keys:["donor_height","ld_height"],field:"donor_height_cm"},
       {keys:["donor_cmv"],field:"donor_cmv"},
-      {keys:["donor_dob"],field:"donor_year_born"},
+      {keys:["donor_dob","ld_year","ld_dob"],field:"donor_year_born"},
     ]:[]),
     // Generic fields that could be either — map based on pairType
     {keys:["name","patient name","full name","pt name","ld patient name","ld name","living donor name"],field:isDonorOnly?"donor_name":"recipient_name"},
@@ -1106,16 +1120,7 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
   },[pairType]);
 
   const relevantFields = PAIRPATH_FIELDS.filter(f => f.types.includes(pairType));
-  const requiredFields = relevantFields.filter(f => f.required);
-  
-  // Only count a required field as missing if it's relevant to this pair type.
-  // Also drop cross-type fields by key prefix: recipient_only hides donor_*, altruistic hides recipient_*.
-  const missingRequired = requiredFields.filter(f => {
-    if(pairType==="recipient_only" && f.key.startsWith("donor_")) return false;
-    if(pairType==="altruistic" && f.key.startsWith("recipient_")) return false;
-    return !Object.values(mapping).includes(f.key);
-  });
-  
+
   // Clean mapping — remove any mapped fields not relevant to current pairType
   const cleanedMapping = Object.fromEntries(
     Object.entries(mapping).filter(([,v]) => !v || relevantFields.some(f=>f.key===v))
@@ -1154,12 +1159,6 @@ function CSVMapper({ headers, pairType, onConfirm, onCancel, preview, initialMap
           </div>
         ))}
       </div>
-
-      {missingRequired.length > 0 && (
-        <div style={{padding:"10px 14px",borderRadius:8,background:"#1a2010",border:"1px solid #2a3010",color:"#ffd166",fontSize:13,marginBottom:16}}>
-          ⚠ Heads up: {missingRequired.map(f=>f.label).join(", ")} not mapped — you can still import, those fields will be blank.
-        </div>
-      )}
 
       <div style={{display:"flex",gap:10}}>
         <button onClick={()=>onConfirm(cleanedMapping)}
@@ -1609,7 +1608,8 @@ export default function App() {
         if(!json.length) return null;
         const headers=json[0].map(h=>String(h).trim()).filter(Boolean);
         if(!headers.length) return null;
-        const dataRows=json.slice(1).filter(r=>r.some(c=>c!==""));
+        const dataRows=json.slice(1).filter(r=>r.some(c=>c!==""))
+          .map(r=>r.map(c=>preConvertSerials(c)));
         const preview=dataRows.slice(0,3).map(row=>{
           const obj={};headers.forEach((h,i)=>{obj[h]=String(row[i]??"");});return obj;
         });
@@ -1769,19 +1769,8 @@ export default function App() {
     const[headerLine,...rows]=text.trim().split("\n");
     const headers=headerLine.split(",").map(h=>h.trim());
 
-    // Pre-convert Excel serial dates in preview and data rows
-    // Expanded range to catch all Excel date serials (1940-2100)
-    function preConvertSerials(val){
-      if(!val) return val;
-      const s=String(val).trim();
-      const n=parseFloat(s);
-      if(!isNaN(n)&&n>14000&&n<80000&&Number.isInteger(n)&&!s.includes("/")){
-        const date=new Date((n-25569)*86400000);
-        return date.toISOString().split("T")[0];
-      }
-      return val;
-    }
-
+    // Excel serial dates are pre-converted via the module-level preConvertSerials
+    // so both the data rows and the first-row preview show ISO dates, not serials.
     const dataRows=rows.filter(r=>r.trim()).map(row=>
       row.split(",").map(v=>preConvertSerials(v.trim().replace(/^"|"$/g,"")))
     );
