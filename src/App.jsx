@@ -3407,6 +3407,21 @@ export default function App() {
         const{donor,recipient,result}=selected;
         const s=scoreStyle(result.score,result.aboOnly);
         const dAge=calcAge(donor.donor_year_born),rAge=calcAge(recipient.recipient_year_born);
+        // Parse a comma-separated HLA notes string (e.g. "A03, A26, B46, B64, DR07, DR14")
+        // into alleles grouped by locus. Order matters: "DR" must be tested before "B"/"A".
+        const parseHLANotes = notes => {
+          const out={A:[],B:[],DR:[]};
+          if(!notes) return out;
+          String(notes).split(",").map(a=>a.trim()).filter(Boolean).forEach(a=>{
+            const u=a.toUpperCase();
+            if(u.startsWith("DR")) out.DR.push(a);
+            else if(u.startsWith("A")) out.A.push(a);
+            else if(u.startsWith("B")) out.B.push(a);
+          });
+          return out;
+        };
+        const donorHLA=parseHLANotes(donor.donor_hla_notes);
+        const recipHLA=parseHLANotes(recipient.recipient_hla_notes);
         return (
           <div style={{...S.page,maxWidth:860}}>
             <button onClick={()=>setView("grid")} style={{background:"none",border:"none",color:"#4db882",cursor:"pointer",fontFamily:"'DM Mono', monospace",fontSize:13,padding:0,marginBottom:24,letterSpacing:"0.05em"}}>← BACK TO GRID</button>
@@ -3459,15 +3474,17 @@ export default function App() {
                 </thead>
                 <tbody>
                   {["A","B","DR"].map(locus=>{
-                    const dl=[donor[`donor_hla_${locus.toLowerCase()}1`],donor[`donor_hla_${locus.toLowerCase()}2`]].filter(Boolean);
-                    const rl=[recipient[`recipient_hla_${locus.toLowerCase()}1`],recipient[`recipient_hla_${locus.toLowerCase()}2`]].filter(Boolean);
-                    const mm=dl.filter(a=>!rl.includes(a)).length;
+                    const dl=donorHLA[locus];
+                    const rl=recipHLA[locus];
+                    // MM = recipient alleles with no matching donor allele at this locus.
+                    const dlUpper=dl.map(a=>a.toUpperCase());
+                    const mm=rl.filter(a=>!dlUpper.includes(a.toUpperCase())).length;
                     return (
                       <tr key={locus} style={{borderTop:"1px solid #141c24"}}>
                         <td style={{padding:"9px 10px",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#b0bec5"}}>HLA-{locus}</td>
                         <td style={{padding:"9px 10px",textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6ab4d0"}}>{dl.join(" / ")||"—"}</td>
                         <td style={{padding:"9px 10px",textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:13,color:"#6ad0a0"}}>{rl.join(" / ")||"—"}</td>
-                        <td style={{padding:"9px 10px",textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:13,color:mm===0?"#2dd4a0":mm===1?"#ffd166":"#ff8a8a"}}>{dl.length?`${mm} MM`:"—"}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",fontFamily:"'DM Mono', monospace",fontSize:13,color:mm===0?"#2dd4a0":mm===1?"#ffd166":"#ff8a8a"}}>{(dl.length||rl.length)?`${mm} MM`:"—"}</td>
                       </tr>
                     );
                   })}
